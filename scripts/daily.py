@@ -14,7 +14,8 @@ from common import BASE, get_json, load_resolved, append_rows
 
 def collect_today():
     date = datetime.date.today().isoformat()
-    resolved = load_resolved(refresh=("--refresh" in sys.argv))
+    refresh = "--refresh" in sys.argv or bool(os.environ.get("GITHUB_ACTIONS"))
+    resolved = load_resolved(refresh=refresh)
     # group assets by (category, group) so each group's price file is fetched once
     by_group = {}
     for r in resolved:

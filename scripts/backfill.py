@@ -12,9 +12,9 @@ Usage:
   python scripts/backfill.py --from 2025-01-01 --to 2025-06-30
 Requires the `7z` binary (Ubuntu: apt-get install p7zip-full).
 """
-import argparse, csv, datetime, glob, json, os, shutil, subprocess, sys, urllib.request
+import argparse, csv, datetime, glob, json, os, shutil, subprocess, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import load_resolved, append_rows, days_done, ROOT
+from common import load_resolved, append_rows, days_done, download, ROOT
 
 ARCHIVE = "https://tcgcsv.com/archive/tcgplayer/prices-{d}.ppmd.7z"
 TMP = os.path.join(ROOT, "_backfill_tmp")
@@ -32,11 +32,9 @@ def process_day(d, resolved, wanted_groups, wanted_products):
     ds = d.isoformat()
     os.makedirs(TMP, exist_ok=True)
     arc = os.path.join(TMP, f"{ds}.7z")
-    try:
-        urllib.request.urlretrieve(ARCHIVE.format(d=ds), arc)
-    except Exception as e:
-        print(f"  {ds}: archive unavailable ({e})", file=sys.stderr)
-        return 0
+    if not download(ARCHIVE.format(d=ds), arc):
+        print(f"  {ds}: archive download failed", file=sys.stderr)
+        return None
     out = os.path.join(TMP, ds)
     # extract only the price files for groups we track (include patterns)
     inc = []
@@ -86,23 +84,34 @@ def main():
     ap.add_argument("--from", dest="frm", default="2025-01-01")
     ap.add_argument("--to", dest="to", default=(datetime.date.today() - datetime.timedelta(days=1)).isoformat())
     args = ap.parse_args()
-    resolved = load_resolved()
+    # always re-resolve in CI so universe.csv edits and matcher fixes take effect
+    resolved = load_resolved(refresh=bool(os.environ.get("GITHUB_ACTIONS")))
     wanted_groups = {str(r["group_id"]) for r in resolved}
     wanted_products = {int(r["product_id"]): r for r in resolved}
     done = days_done()
     a, b = datetime.date.fromisoformat(args.frm), datetime.date.fromisoformat(args.to)
-    cur_month, n_days = None, 0
+    cur_month, n_days, n_fail, first_fail = None, 0, 0, None
     for d in daterange(a, b):
         if d.isoformat() in done:
             continue
+        if n_fail >= 15 and n_days == 0:
+            sys.exit(f"aborting: first {n_fail} archive downloads all failed "
+                     f"(e.g. {first_fail}). The archive endpoint is rejecting us — "
+                     f"check the URL pattern and user-agent, do not hammer the server.")
         if cur_month and d.strftime("%Y-%m") != cur_month:
             git_checkpoint(f"backfill {cur_month}")
         cur_month = d.strftime("%Y-%m")
         n = process_day(d, resolved, wanted_groups, wanted_products)
+        if n is None:
+            n_fail += 1
+            first_fail = first_fail or d.isoformat()
+            continue
         n_days += 1
         print(f"{d}: {n} rows")
     git_checkpoint(f"backfill final ({cur_month})")
-    print(f"done: processed {n_days} days")
+    print(f"done: {n_days} days collected, {n_fail} archive downloads failed")
+    if n_days == 0:
+        sys.exit("backfill produced no data — failing the job so this is visible")
 
 if __name__ == "__main__":
     main()

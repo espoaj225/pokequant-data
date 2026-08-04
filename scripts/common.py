@@ -7,16 +7,55 @@ UNIVERSE = os.path.join(ROOT, "universe.csv")
 RESOLVED = os.path.join(ROOT, "data", "resolved.csv")
 PRICES_DIR = os.path.join(ROOT, "data", "prices")
 
+UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/126.0 Safari/537.36 PokeQuantCollector/1.1")
+
 def get_json(url, retries=3):
     for i in range(retries):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "PokeQuantCollector/1.0"})
+            req = urllib.request.Request(url, headers={"User-Agent": UA})
             with urllib.request.urlopen(req, timeout=60) as r:
                 return json.loads(r.read().decode())
         except Exception as e:
             if i == retries - 1:
                 raise
             time.sleep(2 * (i + 1))
+
+def download(url, dest, retries=3):
+    """Download a (possibly binary) file with a browser-like UA. Returns True on success."""
+    for i in range(retries):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"})
+            with urllib.request.urlopen(req, timeout=300) as r, open(dest, "wb") as f:
+                while True:
+                    chunk = r.read(1 << 20)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+            return True
+        except Exception as e:
+            last = e
+            time.sleep(3 * (i + 1))
+    # last resort: curl, which some CDNs treat differently
+    import subprocess
+    r = subprocess.run(["curl", "-fsSL", "-A", UA, "-o", dest, url],
+                       capture_output=True, text=True)
+    if r.returncode == 0:
+        return True
+    print(f"  download failed {url}: {last} / curl: {r.stderr.strip()[:200]}", file=sys.stderr)
+    return False
+
+def norm_num(s):
+    """Normalize a card number for comparison: '075/203' == '75/203', 'GG69/GG70' ok."""
+    s = str(s).strip().lower()
+    parts = s.split("/")
+    out = []
+    for p in parts:
+        # strip leading zeros from the digit run(s) while keeping any letter prefix
+        head = p.rstrip("0123456789")
+        digits = p[len(head):]
+        out.append(head + (digits.lstrip("0") or "0") if digits else p)
+    return "/".join(out)
 
 def load_universe():
     with open(UNIVERSE, newline="", encoding="utf-8") as f:
@@ -34,13 +73,11 @@ def find_categories():
             out["pokemon-japan"] = c["categoryId"]
     return out
 
-def find_group(groups, query):
-    """Pick the group whose name contains query; prefer the shortest matching name."""
+def find_groups(groups, query):
+    """All groups whose name contains query, shortest names first."""
     q = query.lower()
     hits = [g for g in groups if q in g["name"].lower()]
-    if not hits:
-        return None
-    return sorted(hits, key=lambda g: len(g["name"]))[0]
+    return sorted(hits, key=lambda g: len(g["name"]))
 
 def product_number(p):
     for ed in p.get("extendedData") or []:
@@ -66,36 +103,43 @@ def resolve(verbose=True):
         except Exception as e:
             problems.append((row["asset_id"], f"groups fetch failed: {e}"))
             continue
-        g = find_group(groups_by_cat[cat_id], row["set_query"])
-        if g is None:
+        cand_groups = find_groups(groups_by_cat[cat_id], row["set_query"])
+        if not cand_groups:
             problems.append((row["asset_id"], f"no group matching '{row['set_query']}'"))
             continue
-        gid = g["groupId"]
-        try:
-            if gid not in products_by_group:
-                products_by_group[gid] = get_json(f"{BASE}/{cat_id}/{gid}/products")["results"]
-        except Exception as e:
-            problems.append((row["asset_id"], f"products fetch failed for group {gid}: {e}"))
-            continue
-        prods = products_by_group[gid]
-        match = None
         mv = row["match_value"].strip().lower()
-        if row["match_kind"] == "number":
-            cands = [p for p in prods if product_number(p).lower() == mv]
-            # tolerate '085' vs '85' style promo numbers
-            if not cands and "/" not in mv:
-                cands = [p for p in prods if product_number(p).lstrip("0").lower() == mv.lstrip("0")]
-            match = cands[0] if cands else None
-        else:  # name substring; prefer shortest product name (avoids "Booster Box Case")
-            cands = [p for p in prods if mv in p["name"].lower()]
-            cands = [p for p in cands if "case" not in p["name"].lower()]
-            match = sorted(cands, key=lambda p: len(p["name"]))[0] if cands else None
+        match, g = None, None
+        tried = []
+        for cg in cand_groups[:6]:  # try each candidate group until a product matches
+            gid = cg["groupId"]
+            try:
+                if gid not in products_by_group:
+                    products_by_group[gid] = get_json(f"{BASE}/{cat_id}/{gid}/products")["results"]
+            except Exception as e:
+                tried.append(f"{cg['name']} (fetch failed)")
+                continue
+            prods = products_by_group[gid]
+            if row["match_kind"] == "number":
+                want = norm_num(mv)
+                cands = [p for p in prods if norm_num(product_number(p)) == want]
+                if not cands and "/" in want:  # some sets store numerator only ('4' not '4/102')
+                    numer = want.split("/")[0]
+                    cands = [p for p in prods if norm_num(product_number(p)) == numer]
+            else:  # name substring; prefer shortest product name (avoids "Booster Box Case")
+                cands = [p for p in prods if mv in p["name"].lower()
+                         and "case" not in p["name"].lower()]
+                cands = sorted(cands, key=lambda p: len(p["name"]))
+            if cands:
+                match, g = cands[0], cg
+                break
+            tried.append(cg["name"])
         if match is None:
-            problems.append((row["asset_id"], f"no product match '{row['match_value']}' in group '{g['name']}'"))
+            problems.append((row["asset_id"],
+                             f"no product match '{row['match_value']}' in group(s): {', '.join(tried)}"))
             continue
         resolved.append({
             "asset_id": row["asset_id"], "type": row["type"],
-            "category_id": cat_id, "group_id": gid, "group_name": g["name"],
+            "category_id": cat_id, "group_id": g["groupId"], "group_name": g["name"],
             "product_id": match["productId"], "product_name": match["name"],
             "display_name": row["display_name"],
         })
