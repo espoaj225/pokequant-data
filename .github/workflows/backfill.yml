@@ -1,0 +1,45 @@
+name: Historical backfill (optional)
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: "Start date (YYYY-MM-DD, archives exist from 2024-02-08)"
+        default: "2025-01-01"
+      to:
+        description: "End date (YYYY-MM-DD)"
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install 7zip
+        run: sudo apt-get update -q && sudo apt-get install -y -q p7zip-full
+      - name: Backfill from tcgcsv archives
+        run: |
+          TO="${{ github.event.inputs.to }}"
+          if [ -z "$TO" ]; then TO=$(date -u -d "yesterday" +%F); fi
+          python scripts/backfill.py --from "${{ github.event.inputs.from }}" --to "$TO"
+      - name: Rebuild SQLite database
+        run: python scripts/build_db.py
+      - name: Validate
+        run: python scripts/validate.py
+      - name: Final commit & push
+        run: |
+          git config user.name pokequant-bot
+          git config user.email bot@users.noreply.github.com
+          git add data
+          git diff --cached --quiet || git commit -m "backfill through ${{ github.event.inputs.to || 'yesterday' }}"
+          git push

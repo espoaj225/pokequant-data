@@ -1,0 +1,81 @@
+asset_id,type,category,set_query,match_kind,match_value,display_name
+base1-4,single,pokemon,Base Set,number,4/102,Charizard (Base Set)
+base1-2,single,pokemon,Base Set,number,2/102,Blastoise (Base Set)
+base1-15,single,pokemon,Base Set,number,15/102,Venusaur (Base Set)
+base1-16,single,pokemon,Base Set,number,16/102,Zapdos (Base Set)
+base1-58,single,pokemon,Base Set,number,58/102,Pikachu (Base Set)
+neo1-9,single,pokemon,Neo Genesis,number,9/111,Lugia (Neo Genesis)
+gym2-2,single,pokemon,Gym Challenge,number,2/132,Blaine's Charizard
+swsh7-215,single,pokemon,Evolving Skies,number,215/203,Umbreon VMAX Alt Art
+swsh7-212,single,pokemon,Evolving Skies,number,212/203,Sylveon VMAX Alt Art
+swsh7-205,single,pokemon,Evolving Skies,number,205/203,Leafeon VMAX Alt Art
+swsh7-209,single,pokemon,Evolving Skies,number,209/203,Glaceon VMAX Alt Art
+swsh7-218,single,pokemon,Evolving Skies,number,218/203,Rayquaza VMAX Alt Art
+swsh7-211,single,pokemon,Evolving Skies,number,211/203,Sylveon VMAX Rainbow
+swsh7-204,single,pokemon,Evolving Skies,number,204/203,Leafeon VMAX Rainbow
+swsh7-208,single,pokemon,Evolving Skies,number,208/203,Glaceon VMAX Rainbow
+swsh7-75,single,pokemon,Evolving Skies,number,75/203,Sylveon VMAX
+swsh7-65,single,pokemon,Evolving Skies,number,65/203,Espeon VMAX
+swsh7-41,single,pokemon,Evolving Skies,number,41/203,Glaceon VMAX
+swsh7-8,single,pokemon,Evolving Skies,number,8/203,Leafeon VMAX
+swsh12pt5gg-GG69,single,pokemon,Galarian Gallery,number,GG69/GG70,Giratina VSTAR Gold
+swsh35-74,single,pokemon,Champion's Path,number,74/73,Charizard VMAX (Champion's Path)
+swsh35-25,single,pokemon,Champion's Path,number,25/73,Machoke (Champion's Path)
+swsh45sv-SV107,single,pokemon,Shiny Vault,number,SV107/SV122,Charizard VMAX Shiny
+cel25c-4,single,pokemon,Classic Collection,number,4/102,Charizard Classic Collection
+sv3pt5-199,single,pokemon,151,number,199/165,Charizard ex SIR (151)
+sv3pt5-205,single,pokemon,151,number,205/165,Mew ex Gold (151)
+sv3pt5-6,single,pokemon,151,number,6/165,Charizard ex (151)
+sv3pt5-151,single,pokemon,151,number,151/165,Mew ex (151)
+sv3pt5-4,single,pokemon,151,number,4/165,Charmander (151)
+sv3pt5-7,single,pokemon,151,number,7/165,Squirtle (151)
+sv4pt5-234,single,pokemon,Paldean Fates,number,234/091,Charizard ex Shiny SIR
+sv4pt5-54,single,pokemon,Paldean Fates,number,54/091,Charizard ex (Paldean Fates)
+sv8pt5-161,single,pokemon,Prismatic Evolutions,number,161/131,Umbreon ex SIR
+sv8pt5-179,single,pokemon,Prismatic Evolutions,number,179/131,Pikachu ex Gold
+sv8pt5-167,single,pokemon,Prismatic Evolutions,number,167/131,Eevee ex SIR
+sv8pt5-156,single,pokemon,Prismatic Evolutions,number,156/131,Sylveon ex SIR
+sv8pt5-149,single,pokemon,Prismatic Evolutions,number,149/131,Vaporeon ex SIR
+sv8pt5-155,single,pokemon,Prismatic Evolutions,number,155/131,Espeon ex SIR
+sv8pt5-60,single,pokemon,Prismatic Evolutions,number,60/131,Umbreon ex
+sv8pt5-59,single,pokemon,Prismatic Evolutions,number,59/131,Umbreon (Prismatic)
+sv8pt5-28,single,pokemon,Prismatic Evolutions,number,28/131,Pikachu ex
+sv8pt5-47,single,pokemon,Prismatic Evolutions,number,47/131,Eevee (Prismatic)
+sv2-269,single,pokemon,Paldea Evolved,number,269/193,Iono SIR
+sv2-254,single,pokemon,Paldea Evolved,number,254/193,Iono Ultra Rare
+sv2-185,single,pokemon,Paldea Evolved,number,185/193,Iono
+swsh8-271,single,pokemon,Fusion Strike,number,271/264,Gengar VMAX Alt Art
+swsh9-154,single,pokemon,Brilliant Stars,number,154/172,Charizard V Alt Art
+swsh11-186,single,pokemon,Lost Origin,number,186/196,Giratina V Alt Art
+swsh12-186,single,pokemon,Silver Tempest,number,186/195,Lugia V Alt Art
+svp-085,single,pokemon,Scarlet & Violet Promo,number,085,Pikachu with Grey Felt Hat
+sv8-57,single,pokemon,Surging Sparks,number,57/191,Pikachu (Surging Sparks)
+sl-base-box,sealed,pokemon,Base Set,name,Booster Box,Base Set Booster Box
+sl-neo-box,sealed,pokemon,Neo Genesis,name,Booster Box,Neo Genesis Booster Box
+sl-evs-box,sealed,pokemon,Evolving Skies,name,Booster Box,Evolving Skies Booster Box
+sl-evs-etb,sealed,pokemon,Evolving Skies,name,Elite Trainer Box,Evolving Skies ETB
+sl-champ-etb,sealed,pokemon,Champion's Path,name,Elite Trainer Box,Champion's Path ETB
+sl-shf-etb,sealed,pokemon,Shining Fates,name,Elite Trainer Box,Shining Fates ETB
+sl-hf-etb,sealed,pokemon,Hidden Fates,name,Elite Trainer Box,Hidden Fates ETB
+sl-cz-etb,sealed,pokemon,Crown Zenith,name,Elite Trainer Box,Crown Zenith ETB
+sl-bs-box,sealed,pokemon,Brilliant Stars,name,Booster Box,Brilliant Stars Booster Box
+sl-lo-box,sealed,pokemon,Lost Origin,name,Booster Box,Lost Origin Booster Box
+sl-fs-box,sealed,pokemon,Fusion Strike,name,Booster Box,Fusion Strike Booster Box
+sl-ar-box,sealed,pokemon,Astral Radiance,name,Booster Box,Astral Radiance Booster Box
+sl-st-box,sealed,pokemon,Silver Tempest,name,Booster Box,Silver Tempest Booster Box
+sl-cel-upc,sealed,pokemon,Celebrations,name,Ultra-Premium,Celebrations Ultra Premium Collection
+sl-151-bundle,sealed,pokemon,151,name,Booster Bundle,151 Booster Bundle
+sl-151-etb,sealed,pokemon,151,name,Elite Trainer Box,151 Elite Trainer Box
+sl-151-upc,sealed,pokemon,151,name,Ultra-Premium,151 Ultra Premium Collection
+sl-obf-box,sealed,pokemon,Obsidian Flames,name,Booster Box,Obsidian Flames Booster Box
+sl-pf-etb,sealed,pokemon,Paldean Fates,name,Elite Trainer Box,Paldean Fates ETB
+sl-tf-box,sealed,pokemon,Temporal Forces,name,Booster Box,Temporal Forces Booster Box
+sl-ss-box,sealed,pokemon,Surging Sparks,name,Booster Box,Surging Sparks Booster Box
+sl-pe-etb,sealed,pokemon,Prismatic Evolutions,name,Elite Trainer Box,Prismatic Evolutions ETB
+sl-pe-spc,sealed,pokemon,Prismatic Evolutions,name,Super-Premium,Prismatic Evolutions Super Premium Collection
+sl-dr-box,sealed,pokemon,Destined Rivals,name,Booster Box,Destined Rivals Booster Box
+sl-jt-box,sealed,pokemon,Journey Together,name,Booster Box,Journey Together Booster Box
+sl-me1-box,sealed,pokemon,Mega Evolution,name,Booster Box,Mega Evolution Booster Box
+sl-phf-box,sealed,pokemon,Phantasmal Flames,name,Booster Box,Phantasmal Flames Booster Box
+sl-jp-terastal,sealed,pokemon-japan,Terastal Festival,name,Booster Box,Terastal Festival ex Booster Box (JP)
+sl-jp-151,sealed,pokemon-japan,151,name,Booster Box,Pokemon 151 Booster Box (JP)
