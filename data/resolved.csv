@@ -1,0 +1,59 @@
+asset_id,type,category_id,group_id,group_name,product_id,product_name,display_name
+swsh7-215,single,3,2848,SWSH07: Evolving Skies,246723,Umbreon VMAX (Alternate Art Secret),Umbreon VMAX Alt Art
+swsh7-212,single,3,2848,SWSH07: Evolving Skies,246704,Sylveon VMAX (Alternate Art Secret),Sylveon VMAX Alt Art
+swsh7-205,single,3,2848,SWSH07: Evolving Skies,246696,Leafeon VMAX (Alternate Art Secret),Leafeon VMAX Alt Art
+swsh7-209,single,3,2848,SWSH07: Evolving Skies,246756,Glaceon VMAX (Alternate Art Secret),Glaceon VMAX Alt Art
+swsh7-218,single,3,2848,SWSH07: Evolving Skies,246733,Rayquaza VMAX (Alternate Art Secret),Rayquaza VMAX Alt Art
+swsh7-211,single,3,2848,SWSH07: Evolving Skies,246702,Sylveon VMAX (Secret),Sylveon VMAX Rainbow
+swsh7-204,single,3,2848,SWSH07: Evolving Skies,246693,Leafeon VMAX (Secret),Leafeon VMAX Rainbow
+swsh7-208,single,3,2848,SWSH07: Evolving Skies,246755,Glaceon VMAX (Secret),Glaceon VMAX Rainbow
+swsh12pt5gg-GG69,single,3,17689,SWSH: Crown Zenith: Galarian Gallery,478100,Giratina VSTAR (Secret),Giratina VSTAR Gold
+swsh35-74,single,3,2685,Champion's Path,223073,Charizard VMAX (Secret),Charizard VMAX (Champion's Path)
+swsh35-25,single,3,2685,Champion's Path,223018,Machoke,Machoke (Champion's Path)
+cel25c-4,single,3,2931,Celebrations: Classic Collection,250320,Charizard,Charizard Classic Collection
+sv3pt5-199,single,3,23237,SV: Scarlet & Violet 151,517045,Charizard ex - 199/165,Charizard ex SIR (151)
+sv3pt5-205,single,3,23237,SV: Scarlet & Violet 151,517051,Mew ex - 205/165,Mew ex Gold (151)
+sv3pt5-151,single,3,23237,SV: Scarlet & Violet 151,516566,Mew ex - 151/165,Mew ex (151)
+sv4pt5-234,single,3,23353,SV: Paldean Fates,535090,Charizard ex - 234/091,Charizard ex Shiny SIR
+sv8pt5-161,single,3,23821,SV: Prismatic Evolutions,610516,Umbreon ex - 161/131,Umbreon ex SIR
+sv8pt5-179,single,3,23821,SV: Prismatic Evolutions,610534,Pikachu ex - 179/131,Pikachu ex Gold
+sv8pt5-167,single,3,23821,SV: Prismatic Evolutions,610522,Eevee ex - 167/131,Eevee ex SIR
+sv8pt5-156,single,3,23821,SV: Prismatic Evolutions,610511,Sylveon ex - 156/131,Sylveon ex SIR
+sv8pt5-149,single,3,23821,SV: Prismatic Evolutions,610504,Vaporeon ex - 149/131,Vaporeon ex SIR
+sv8pt5-155,single,3,23821,SV: Prismatic Evolutions,610510,Espeon ex - 155/131,Espeon ex SIR
+sv2-269,single,3,23120,SV02: Paldea Evolved,497689,Iono - 269/193,Iono SIR
+sv2-254,single,3,23120,SV02: Paldea Evolved,497669,Iono - 254/193,Iono Ultra Rare
+sv2-185,single,3,23120,SV02: Paldea Evolved,497557,Iono - 185/193,Iono
+swsh8-271,single,3,2906,SWSH08: Fusion Strike,253266,Gengar VMAX (Alternate Art Secret),Gengar VMAX Alt Art
+swsh9-154,single,3,2948,SWSH09: Brilliant Stars,263873,Charizard V (Alternate Full Art),Charizard V Alt Art
+swsh11-186,single,3,3118,SWSH11: Lost Origin,284137,Giratina V (Alternate Full Art),Giratina V Alt Art
+swsh12-186,single,3,3170,SWSH12: Silver Tempest,451834,Lugia V (Alternate Full Art),Lugia V Alt Art
+svp-085,single,3,22872,SV: Scarlet & Violet Promo Cards,518861,Pikachu with Grey Felt Hat,Pikachu with Grey Felt Hat
+sl-base-box,sealed,3,604,Base Set,185731,Base Set Booster Box [Revised Unlimited Edition],Base Set Booster Box
+sl-neo-box,sealed,3,1396,Neo Genesis,193334,Neo Genesis Booster Box [1st Edition],Neo Genesis Booster Box
+sl-evs-box,sealed,3,2848,SWSH07: Evolving Skies,242436,Evolving Skies Booster Box,Evolving Skies Booster Box
+sl-evs-etb,sealed,3,2848,SWSH07: Evolving Skies,243721,Evolving Skies Elite Trainer Box [Set of 2],Evolving Skies ETB
+sl-champ-etb,sealed,3,2685,Champion's Path,218791,Champion's Path Elite Trainer Box,Champion's Path ETB
+sl-shf-etb,sealed,3,2754,Shining Fates,228821,Shining Fates Elite Trainer Box,Shining Fates ETB
+sl-hf-etb,sealed,3,2480,Hidden Fates,194729,Hidden Fates Elite Trainer Box,Hidden Fates ETB
+sl-cz-etb,sealed,3,17688,SWSH: Crown Zenith,453470,Crown Zenith Elite Trainer Box,Crown Zenith ETB
+sl-bs-box,sealed,3,2948,SWSH09: Brilliant Stars,256141,Brilliant Stars Booster Box,Brilliant Stars Booster Box
+sl-lo-box,sealed,3,3118,SWSH11: Lost Origin,277324,Lost Origin Booster Box,Lost Origin Booster Box
+sl-fs-box,sealed,3,2906,SWSH08: Fusion Strike,247654,Fusion Strike Booster Box,Fusion Strike Booster Box
+sl-ar-box,sealed,3,3040,SWSH10: Astral Radiance,265519,Astral Radiance Booster Box,Astral Radiance Booster Box
+sl-st-box,sealed,3,3170,SWSH12: Silver Tempest,283389,Silver Tempest Booster Box,Silver Tempest Booster Box
+sl-cel-upc,sealed,3,2867,Celebrations,245140,Celebrations Ultra-Premium Collection,Celebrations Ultra Premium Collection
+sl-151-bundle,sealed,3,23237,SV: Scarlet & Violet 151,502000,151 Booster Bundle,151 Booster Bundle
+sl-151-etb,sealed,3,23237,SV: Scarlet & Violet 151,503313,151 Elite Trainer Box,151 Elite Trainer Box
+sl-151-upc,sealed,3,23237,SV: Scarlet & Violet 151,502005,151 Ultra-Premium Collection,151 Ultra Premium Collection
+sl-obf-box,sealed,3,23228,SV03: Obsidian Flames,501257,Obsidian Flames Booster Box,Obsidian Flames Booster Box
+sl-pf-etb,sealed,3,23353,SV: Paldean Fates,528040,Paldean Fates Elite Trainer Box,Paldean Fates ETB
+sl-tf-box,sealed,3,23381,SV05: Temporal Forces,536225,Temporal Forces Booster Box,Temporal Forces Booster Box
+sl-ss-box,sealed,3,23651,SV08: Surging Sparks,565606,Surging Sparks Booster Box,Surging Sparks Booster Box
+sl-pe-etb,sealed,3,23821,SV: Prismatic Evolutions,593355,Prismatic Evolutions Elite Trainer Box,Prismatic Evolutions ETB
+sl-pe-spc,sealed,3,23821,SV: Prismatic Evolutions,622770,Prismatic Evolutions Super-Premium Collection,Prismatic Evolutions Super Premium Collection
+sl-dr-box,sealed,3,24269,SV10: Destined Rivals,624679,Destined Rivals Booster Box,Destined Rivals Booster Box
+sl-jt-box,sealed,3,24073,SV09: Journey Together,610931,Journey Together Booster Box,Journey Together Booster Box
+sl-me1-box,sealed,3,24380,ME01: Mega Evolution,644298,Mega Evolution Booster Box,Mega Evolution Booster Box
+sl-phf-box,sealed,3,24448,ME02: Phantasmal Flames,654137,Phantasmal Flames Booster Box,Phantasmal Flames Booster Box
+sl-jp-151,sealed,85,23599,SV2a: Pokemon Card 151,565243,Pokemon Card 151 Booster Box,Pokemon 151 Booster Box (JP)
