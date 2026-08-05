@@ -182,3 +182,51 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
   .hero .val{font-size:34px}
 }
 @media (max-width:560px){.g2,.g3,.g4{grid-template-columns:1fr}.scores7{grid-template-columns:repeat(2,1fr)}}
+
+/* ---------- v5: temperature, quadrants, treemap, card art ---------- */
+.tempchip{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;letter-spacing:.5px;
+  border:1px solid;border-radius:99px;padding:2px 9px;white-space:nowrap;vertical-align:middle}
+.tempchip.sm{font-size:9px;padding:1px 6px}
+.cardthumb{width:34px;height:34px;object-fit:contain;border-radius:5px;flex:none;background:var(--surface2)}
+.cardhero{width:150px;max-height:210px;object-fit:contain;border-radius:10px;flex:none}
+.quad-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.quad{position:relative}
+.quad .qhead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.quad .qname{font-size:14px;font-weight:700}
+.quad .grow{font-size:24px;font-weight:650;letter-spacing:-.3px;margin:4px 0 0}
+.quad .qsub{font-size:11.5px;color:var(--muted)}
+.quad .qmover{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:9px;border-top:1px solid var(--grid);
+  font-size:12px;color:var(--ink2);cursor:pointer;border-radius:8px}
+.quad .qmover:hover{background:var(--surface2)}
+.rotation{display:flex;gap:6px;overflow-x:auto;padding:2px 0}
+.rotation .rq{flex:1;min-width:86px;border-radius:10px;padding:9px 10px;border:1px solid var(--border);text-align:center}
+.rotation .rq .ql{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.rotation .rq .qn{font-size:12px;font-weight:700;margin:3px 0 1px}
+.rotation .rq .qv{font-size:12.5px;font-variant-numeric:tabular-nums;font-weight:650}
+.corrbox{display:flex;gap:14px;flex-wrap:wrap}
+.corrbox .cpair{flex:1;min-width:140px;background:var(--surface2);border-radius:10px;padding:10px 12px;text-align:center}
+.corrbox .cpair b{font-size:19px}
+.corrbox .cpair small{display:block;color:var(--muted);margin-top:2px}
+.treemap{position:relative;width:100%;user-select:none}
+.tmtile{position:absolute;overflow:hidden;border-radius:5px;border:2px solid var(--page);cursor:pointer;
+  display:flex;flex-direction:column;justify-content:space-between;padding:6px 7px;transition:filter .1s}
+.tmtile:hover{filter:brightness(1.25);z-index:2}
+.tmtile .tn{font-size:11px;font-weight:650;line-height:1.2;overflow:hidden;color:var(--ink)}
+.tmtile .tv{font-size:11px;font-variant-numeric:tabular-nums;font-weight:700;color:var(--ink2)}
+.tm-legend{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);margin-top:8px}
+.tm-legend .sw{width:26px;height:10px;border-radius:3px}
+.idxcard .grow{font-size:23px;font-weight:650}
+.heroX .grow{font-size:40px;font-weight:650;letter-spacing:-.5px}
+@media (max-width:700px){.quad-grid{grid-template-columns:1fr}.cardhero{width:100px}}
+
+/* ---------- v6: plain-language layer ---------- */
+.hint{border-bottom:1px dotted var(--muted);cursor:help}
+.learn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.learn-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 15px}
+.learn-card b{display:block;font-size:13.5px;margin-bottom:4px}
+.learn-card p{font-size:12.8px;color:var(--ink2);line-height:1.5}
+.learn-card .good{margin-top:6px;font-size:11.5px;color:var(--muted)}
+.sixty{counter-reset:step;display:grid;gap:8px}
+.sixty div{display:flex;gap:10px;align-items:baseline;font-size:13.5px;color:var(--ink2)}
+.sixty div::before{counter-increment:step;content:counter(step);flex:none;width:22px;height:22px;border-radius:50%;
+  background:var(--wash);color:var(--accent);font-weight:700;font-size:12px;display:inline-flex;align-items:center;justify-content:center}

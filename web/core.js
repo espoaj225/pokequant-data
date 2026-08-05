@@ -173,10 +173,12 @@ function spark(pts,w=90,h=26,color){
 const SCORE_HELP=DATA.methodology;
 function scoreChip(key,label,val,max=100,tone){
   const c=el("div","scorechip");const k=el("div","k");k.appendChild(el("span",null,label));
-  const q=el("span","qmark","?");q.title=SCORE_HELP[key]||"";k.appendChild(q);c.appendChild(k);
+  const q=el("span","qmark","?");k.appendChild(q);c.appendChild(k);
   c.appendChild(el("div","v",typeof val==="number"?(max===1?Math.round(val*100)+"%":Math.round(val)):val));
   const m=el("div","meter"+(tone?" "+tone:""));const i=el("i");
   i.style.width=Math.min(100,(max===1?val*100:val/max*100))+"%";m.appendChild(i);c.appendChild(m);
+  if(typeof GLOSSARY!=="undefined"&&GLOSSARY[key])tipFor(c,key,"Full formula: Methodology page.");
+  else c.title=SCORE_HELP[key]||"";
   return c;}
 
 /* ---------- price segments ---------- */
@@ -189,8 +191,8 @@ const M=(a,k)=>a.metrics[k], MP=(a,k)=>a.metrics[k]?a.metrics[k].pct:null;
 function meaningful(a){const mm=a.metrics.mom;if(!mm)return null;
   return Math.sign(mm.pct)*Math.pow(Math.abs(mm.pct),0.6)*Math.pow(Math.log10(1+Math.abs(mm.usd)),1.2);}
 const BOARDS=[
- {id:"hot_singles",t:"Hottest cards",d:"Top Market Momentum Score — eligible singles only",pool:a=>a.type==="single",key:a=>a.scores.momentum,val:a=>Math.round(a.scores.momentum)},
- {id:"hot_sealed",t:"Hottest sealed",d:"Top Market Momentum Score — eligible sealed only",pool:a=>a.type==="sealed",key:a=>a.scores.momentum,val:a=>Math.round(a.scores.momentum)},
+ {id:"hot_singles",t:"Hottest cards",d:"Top Heat Score — confirmed multi-horizon strength, not one spike",pool:a=>a.type==="single",key:a=>a.scores.heat??a.scores.momentum,val:a=>Math.round(a.scores.heat??a.scores.momentum)},
+ {id:"hot_sealed",t:"Hottest sealed",d:"Top Heat Score — eligible sealed only",pool:a=>a.type==="sealed",key:a=>a.scores.heat??a.scores.momentum,val:a=>Math.round(a.scores.heat??a.scores.momentum)},
  {id:"mom_gain",t:"Meaningful monthly gainers",d:"Meaningful Move Score blends % and $ so penny spikes don't lead",key:meaningful,val:a=>fp(MP(a,"mom"))},
  {id:"mom_lose",t:"Meaningful monthly losers",d:"Largest financially meaningful MoM declines",key:a=>{const v=meaningful(a);return v==null?null:-v;},val:a=>fp(MP(a,"mom"))},
  {id:"usd_gain",t:"Top dollar gainers (30d)",d:"Largest absolute 30-day USD gain",key:a=>M(a,"r30")?M(a,"r30").usd:null,val:a=>"+"+fm(M(a,"r30").usd)},
@@ -258,3 +260,159 @@ function liteMetrics(startIdx,p){
   for(let i=1;i<seg.length;i++){const r=Math.log(seg[i]/seg[i-1]);if(Math.abs(r)>1e-12)rs.push(r);}
   if(rs.length>=8){const mu=mean(rs);m.vol90=Math.sqrt(mean(rs.map(r=>(r-mu)*(r-mu))))*Math.sqrt(365)*100;}
   return m;}
+
+/* ---------- temperature system ---------- */
+const TEMP={
+  hot:{label:"HOT",icon:"🔥",color:"var(--good)"},
+  warming:{label:"WARMING",icon:"↗",color:"var(--up)"},
+  stagnant:{label:"STAGNANT",icon:"→",color:"var(--muted)"},
+  cooling:{label:"COOLING",icon:"↘",color:"var(--serious)"},
+  cold:{label:"COLD",icon:"❄",color:"var(--crit)"}};
+function tempChip(t,small){
+  const cfg=TEMP[t]||TEMP.stagnant;
+  const c=el("span","tempchip"+(small?" sm":""));
+  c.style.color=cfg.color;c.style.borderColor=cfg.color;
+  c.textContent=cfg.icon+" "+cfg.label;
+  c.title=SCORE_HELP.temperature||"";
+  return c;}
+
+/* ---------- card artwork (TCGplayer public CDN, predictable by product id) ---------- */
+function cardImgUrl(pid,size){return pid?`https://tcgplayer-cdn.tcgplayer.com/product/${pid}_in_${size||"200x200"}.jpg`:null;}
+function cardImg(a,size,cls){
+  const pid=a.pid||a;if(!pid)return null;
+  const img=document.createElement("img");
+  img.src=(a.img&&size==="200x200"?a.img:null)||cardImgUrl(pid,size);
+  img.loading="lazy";img.alt="";img.className=cls||"cardthumb";
+  img.onerror=()=>{img.style.display="none";};
+  return img;}
+
+/* ---------- growth-of-$100 framing ---------- */
+function grow100(level){return "$100 → $"+Math.round(level).toLocaleString();}
+
+/* ---------- squarified treemap layout ---------- */
+function squarify(items,x,y,w,h){
+  // items: [{v (value>0), ...}] sorted desc. Returns items with x,y,w,h set.
+  const total=items.reduce((s,i)=>s+i.v,0);if(!total)return items;
+  const scale=w*h/total;
+  let row=[],rest=items.slice(),rx=x,ry=y,rw=w,rh=h;
+  function worst(row,len){
+    const s=row.reduce((a,i)=>a+i.v*scale,0);
+    let mx=0;
+    for(const i of row){const a=i.v*scale;
+      mx=Math.max(mx,Math.max(len*len*a/(s*s),s*s/(len*len*a)));}
+    return mx;}
+  function layout(row,horiz){
+    const s=row.reduce((a,i)=>a+i.v*scale,0);
+    const len=horiz?rw:rh;const breadth=s/len;
+    let off=0;
+    for(const i of row){const frac=(i.v*scale)/s;
+      if(horiz){i.x=rx+off*rw;i.y=ry;i.w=frac*rw;i.h=breadth;}
+      else{i.x=rx;i.y=ry+off*rh;i.w=breadth;i.h=frac*rh;}
+      off+=frac;}
+    if(horiz){ry+=breadth;rh-=breadth;}else{rx+=breadth;rw-=breadth;}}
+  while(rest.length){
+    const horiz=rw>=rh;const len=horiz?rw:rh;
+    const it=rest[0];
+    if(!row.length||worst([...row,it],Math.min(rw,rh))<=worst(row,Math.min(rw,rh))){
+      row.push(it);rest.shift();}
+    else{layout(row,rw<rh);row=[];}
+    if(!rest.length&&row.length)layout(row,rw<rh);}
+  return items;}
+function heatColor(pct,alphaBoost){
+  // diverging: red (loss) -> neutral -> green (gain), magnitude-capped at ±15%
+  const v=Math.max(-15,Math.min(15,pct||0))/15;
+  const a=(0.12+0.55*Math.abs(v))*(alphaBoost||1);
+  return v>=0?`rgba(12,163,12,${a})`:`rgba(208,59,59,${a})`;}
+
+/* ================= plain-language layer: glossary, hints, page legends ================= */
+const GLOSSARY={
+ price:["Market price","What this actually sells for on TCGplayer right now, based on real sales — not the (often higher) asking prices."],
+ ret:["Price change","Percent change vs that many days ago. Green = up, red = down."],
+ ret30:["30-day change","Today's price vs 30 days ago."],
+ ret180:["6-month change","Today's price vs 6 months ago."],
+ mom:["Month-over-month","End of last month vs the month before — a clean calendar comparison that ignores mid-month noise."],
+ window:["Since Jan 2025","Change since the very start of this database (January 2025)."],
+ grow100:["Growth of $100","If you'd put $100 into this at the start, this is what it would be worth today."],
+ level:["Index level","The raw index number. It started at 100 in Jan 2025 — so 230 means +130% since then."],
+ index:["Index","A basket of many cards or products tracked as one number — like the S&P 500, but for Pokémon."],
+ temp:["Temperature","A quick weather report: 🔥 HOT = rising fast and above trend · ↗ WARMING = gently rising · → STAGNANT = sideways · ↘ COOLING = drifting down · ❄ COLD = falling and below trend."],
+ momentum:["Momentum","Is it moving up right now? A 0–100 speedometer: 50 = flat, 70+ = strong climb, under 30 = falling. Blends the last week, month and quarter."],
+ heat:["Heat Score","Momentum plus proof. High heat means the week, month AND quarter all point up, the price sits above its trend lines and near its high — a confirmed run, not a one-day spike."],
+ volatility:["Volatility","How bumpy the ride is. High = big swings both ways, so you can gain or lose quickly. Under 30 is calm; over 60 is rough seas."],
+ stability:["Stability","The opposite of bumpy: high means the price stays in a steady lane. Comforting for holders, boring for flippers."],
+ spreadPct:["Listed spread","The gap between the cheapest listing and a typical one. A small gap means the quoted price is solid; a big gap means it's fuzzy — expect haggling."],
+ spread:["Spread tightness","100 = listings tightly packed around the market price (easy to buy/sell near the quote). Low = listings scattered, quote is soft."],
+ confidence:["Confidence","How much to trust the quoted price: lots of daily data + calm trading + tight listings = high trust. Thin or wild markets score low."],
+ quality:["Investment quality","The “could I comfortably hold this?” score — blends a steady upward trend, calm prices, trustworthy data and tight spreads."],
+ breakout:["Breakout probability","The model's estimate of the chance this sets a new high soon. Treat it like a weather forecast, not a promise."],
+ ma:["Trend lines (averages)","The average price over the last 50 or 200 days. Price above the line = uptrend; below = downtrend."],
+ vsma:["vs trend line","How far today's price sits above (+) or below (−) its own average. Far above can mean overheated; far below can mean beaten down."],
+ high:["Window high / low","The highest and lowest price since Jan 2025, and how far today's price is from each."],
+ eligible:["Ranking rules","To appear in rankings an item needs a real price of $5+ ($25 for sealed), prices on most days, and 4+ months of history — this keeps junk data off the boards."],
+ meaningful:["Meaningful moves","Rankings weigh percent AND dollars together, so a 1¢ card tripling can never outrank a $600 card gaining $200."],
+ coverage:["Coverage","The share of days this item actually had a market price. Low coverage = a thin market that trades sporadically."],
+ trophy:["Thin market","A rarely-traded item — a single sale can move its quoted price a lot, so it's kept off the momentum boards but still fully viewable."],
+ sparkline:["Trend","The little line = last 90 days of price, green if up overall, red if down."],
+ breadth:["Market breadth","What share of everything we track is above its own 50-day trend line. High = a broad rally; low = weakness almost everywhere."],
+ scenario:["Scenarios","Bull / base / bear are model-projected 6-month paths from current trend and choppiness. Estimates to frame thinking — never guarantees."],
+};
+function tipFor(elm,key,extra){
+  const g=GLOSSARY[key];if(!g)return elm;
+  elm.classList.add("hint");
+  const show=ev=>showTip(ev.clientX||innerWidth/2,ev.clientY||90,t=>{
+    t.appendChild(el("div","tdate",g[0]));
+    const p=el("div",null,g[1]);p.style.cssText="max-width:250px;line-height:1.45";t.appendChild(p);
+    if(extra){const x=el("div","tdate");x.style.marginTop="5px";x.textContent=extra;t.appendChild(x);}});
+  elm.addEventListener("pointerenter",show);
+  elm.addEventListener("pointerdown",show);
+  elm.addEventListener("pointerleave",hideTip);
+  return elm;}
+function hint(label,key){return tipFor(el("span",null,label),key);}
+const TH_GLOSSARY={"Price":"price","7d":"ret","30d":"ret30","MoM":"mom","6m":"ret180","1y":"ret",
+  "Spread":"spreadPct","Qual":"quality","Conf":"confidence","Mom.":"momentum","Volat.":"volatility",
+  "Trend":"sparkline","P/L %":"ret","P/L $":"ret"};
+const PAGE_HELP={
+ overview:["Big number = what $100 invested in the whole market in Jan 2025 is worth today.",
+  "The four panels are four SEPARATE markets — sealed boxes and single cards, modern and vintage, barely move together.",
+  "Temperature chips (🔥→❄) are the fastest read: is this thing rising, sideways, or falling?",
+  "The rotation strip shows which of the four markets led each quarter — leadership changes hands."],
+ map:["Each rectangle is a set (or card, once you drill in). Bigger = more tracked money in it.",
+  "Green = price rising, red = falling, over the period you pick above. The % is printed on every readable tile.",
+  "Click a set to see its cards; click a card to open its full page."],
+ singles:["Only individual cards here — sealed boxes live on their own desk because they behave differently.",
+  "Boards are eligibility-gated: cheap or barely-traded items can't clutter them.",
+  "Click any row to open the card's full page."],
+ sealed:["Only factory-sealed products here — boxes, ETBs, bundles. Supply only shrinks over time, so this market has its own rhythm.",
+  "Same rules as everywhere: real TCGplayer prices, temperature chips, click for detail."],
+ rankings:["Every board answers one question, written under its title.",
+  "Gainer/loser boards use Meaningful Moves: percent AND dollars must both matter, so penny cards can't top the charts.",
+  "Use the price-band pills to see rankings within your budget."],
+ indexes:["An index is a basket tracked as one number — shown as what $100 would have become since Jan 2025.",
+  "The small 'level' number is the same thing in index form (started at 100).",
+  "Temperature chips tell you each basket's current weather."],
+ screener:["A filterable table of every asset with full analytics.",
+  "Set minimum scores with the sliders; click any column header to sort.",
+  "Hover any header for what the column means."],
+ compare:["Pick up to four items; each is rebased to 100 at the start of the range so you compare journeys, not price tags.",
+  "A $10 card and a $2,000 box can be compared fairly this way."],
+ alerts:["'Triggered today' = conditions our screens detected in the latest data.",
+  "'My alert rules' are yours — in this demo they reset on refresh; accounts would make them permanent."],
+ watchlist:["Star anything (☆) anywhere to pin it here.","Resets on refresh in this version."],
+ portfolio:["A demo collection marked to real market prices.",
+  "Net proceeds assume you sell at market, minus ~13% fees — not at the highest asking price."],
+ learn:[],methodology:[]};
+function helpBar(viewKey){
+  const items=PAGE_HELP[viewKey];
+  if(!items||!items.length)return el("span");
+  const wrap=el("div");wrap.style.marginBottom="14px";
+  const btn=el("button","pill","ⓘ  What am I looking at?");
+  const panel=el("div","callout");panel.style.cssText="display:none;margin-top:8px";
+  const ul=el("ul","risklist");items.forEach(t=>ul.appendChild(el("li",null,t)));
+  panel.appendChild(ul);
+  const more=el("div","note");more.style.marginTop="6px";
+  more.appendChild(document.createTextNode("New here? Read "));
+  const lk=el("a",null,"Learn the basics");lk.href="#";lk.onclick=e=>{e.preventDefault();go("learn");};
+  more.appendChild(lk);more.appendChild(document.createTextNode(" — 3 minutes, no finance background needed. Dotted-underlined words anywhere show a plain-English meaning on hover."));
+  panel.appendChild(more);
+  btn.onclick=()=>{const on=panel.style.display==="none";panel.style.display=on?"block":"none";btn.classList.toggle("on",on);};
+  wrap.appendChild(btn);wrap.appendChild(panel);return wrap;}

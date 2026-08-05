@@ -1,10 +1,10 @@
 /* ================= PokeQuant views ================= */
 "use strict";
-const NAV=[["sec","Markets"],["overview","◈","Market overview"],["singles","▤","Singles desk"],["sealed","▦","Sealed desk"],
+const NAV=[["sec","Markets"],["overview","◈","Market overview"],["map","▩","Market map"],["singles","▤","Singles desk"],["sealed","▦","Sealed desk"],
   ["rankings","≡","Rankings"],["indexes","∿","Indexes"],
   ["sec","Research"],["screener","⌕","Screener"],["compare","⇄","Compare"],["alerts","◷","Alert center"],
   ["sec","My desk"],["watchlist","★","Watchlist"],["portfolio","▥","Portfolio"],
-  ["sec","About"],["methodology","ⓘ","Methodology"]];
+  ["sec","About"],["learn","✦","Learn the basics"],["methodology","ⓘ","Methodology (advanced)"]];
 
 function render(){
   const root=$("#app");root.textContent="";
@@ -67,10 +67,12 @@ function render(){
   main.appendChild(tb);
   const body=el("div");main.appendChild(body);
   shell.appendChild(main);root.appendChild(shell);
-  const V={overview:vOverview,singles:b=>vDesk(b,"single"),sealed:b=>vDesk(b,"sealed"),rankings:vRankings,
+  const V={overview:vOverview,map:vMarketMap,singles:b=>vDesk(b,"single"),sealed:b=>vDesk(b,"sealed"),rankings:vRankings,
     indexes:vIndexes,screener:vScreener,compare:vCompare,watchlist:vWatchlist,portfolio:vPortfolio,
-    alerts:vAlerts,methodology:vMethod,product:vProduct,index:vIndexDetail};
+    alerts:vAlerts,learn:vLearn,methodology:vMethod,product:vProduct,index:vIndexDetail};
   (V[state.view]||vOverview)(body);
+  const subEl=body.querySelector(".sub");
+  if(subEl&&PAGE_HELP[state.view]&&PAGE_HELP[state.view].length)subEl.after(helpBar(state.view));
   const foot=el("div","footer-note");foot.textContent=META.disclaimer;main.appendChild(foot);
 }
 
@@ -94,7 +96,9 @@ function assetTable(box,list,opts={}){
   const draw=()=>{t.textContent="";
     const tr=el("tr");cols.forEach((c,i)=>{const th=document.createElement("th");
       th.textContent=c[0];if(c[1]){th.className="sortable";th.onclick=()=>{if(sortIdx===i)desc=!desc;else{sortIdx=i;desc=true;}draw();};}
-      if(sortIdx===i)th.textContent+=desc?" ↓":" ↑";tr.appendChild(th);});
+      if(sortIdx===i)th.textContent+=desc?" ↓":" ↑";
+      if(TH_GLOSSARY[c[0]])tipFor(th,TH_GLOSSARY[c[0]]);
+      tr.appendChild(th);});
     t.appendChild(tr);
     let rows=[...list];
     if(cols[sortIdx]&&cols[sortIdx][1]){rows.sort((x,y)=>{
@@ -125,34 +129,78 @@ function vOverview(box){
   box.appendChild(el("div","h1","Market overview"));
   box.appendChild(el("div","sub","Real TCGplayer market data — "+META.days+" consecutive days ("+META.windowStart+" → "+META.windowEnd+"), collected daily into your own repository. Sealed products and singles are tracked as separate asset classes throughout."));
   const IX={},S=SER();DATA.indexes.forEach(i=>IX[i.id]=i);
-  const comp=IX.idx_overall,sl=IX.idx_sealed,sg=IX.idx_singles;
-  // hero tiles
-  const g=el("div","grid g4");
-  const heroTile=(lab,ix,hero)=>{const c=el("div","card tile"+(hero?" hero":""));
-    if(!ix){c.appendChild(el("div","lab",lab));c.appendChild(el("div","val","–"));return c;}
-    c.appendChild(el("div","lab",lab));c.appendChild(el("div","val",ix.level.toFixed(1)));
-    const d=el("div","delta "+pcls(ix.r30));d.textContent=fp(ix.r30)+" · 30d";c.appendChild(d);
+  const comp=IX.idx_overall;
+  // hero: whole market in one sentence
+  const g=el("div","grid g2");
+  const hc=el("div","card heroX");
+  const hh=el("div");hh.style.cssText="display:flex;align-items:center;gap:10px;flex-wrap:wrap";
+  hh.appendChild(el("h3",null,"The whole market, since "+(META.windowLabel||"Jan 2025")));
+  if(comp&&comp.temp)hh.appendChild(tempChip(comp.temp));hc.appendChild(hh);
+  if(comp){hc.appendChild(el("div","grow",grow100(comp.level)));
+    const d=el("div","delta "+pcls(comp.r30));d.textContent=fp(comp.r30)+" last 30 days · "+fp(comp.window,0)+" total · index level "+comp.level.toFixed(1);
+    hc.appendChild(d);
     const sp=el("div");sp.style.marginTop="8px";
-    sp.appendChild(spark(ix.series.map((v,j)=>[j,v]),150,30,cssv("--s1")));c.appendChild(sp);
-    return c;};
-  g.appendChild(heroTile("PokéQuant Composite (Jan 2025 = 100)",comp,true));
-  g.appendChild(heroTile("Sealed Product Index",sl));
-  g.appendChild(heroTile("Singles Index",sg));
+    sp.appendChild(spark(comp.series.map((v,j)=>[j,v]),320,42,cssv("--s1")));hc.appendChild(sp);}
+  g.appendChild(hc);
   const br=breadth();const bc=el("div","card tile");
   bc.appendChild(el("div","lab","Market breadth"));
   bc.appendChild(el("div","val",br+"%"));
-  bc.appendChild(el("div","delta flat2","of assets above 50-day average"));
+  bc.appendChild(el("div","delta flat2","of assets above their 50-day average"));
   const m=el("div","meter"+(br<40?" warn":br>65?" good":""));const mi=el("i");mi.style.width=br+"%";m.appendChild(mi);
-  m.style.marginTop="12px";bc.appendChild(m);g.appendChild(bc);
-  box.appendChild(g);
-  // main chart: sealed vs singles vs vintage vs modern (indexed)
-  box.appendChild(el("div","sec-title","Asset classes, indexed (100 = Jan 2025)"));
-  const cc=el("div","card");const cb=el("div");cc.appendChild(cb);box.appendChild(cc);
-  setTimeout(()=>{
-    const defs=[["Sealed",sl],["Singles",sg],["Vintage",IX.idx_vintage],["Modern",IX.idx_modern]];
-    lineChart(cb,defs.filter(d=>d[1]).map((d,i)=>({name:d[0],color:S[i],
-      pts:d[1].series.map((v,j)=>[Math.min(j*7,N_DAYS-1),v])})),
-      {h:280,yFmt:v=>v.toFixed(0)});},0);
+  m.style.marginTop="12px";bc.appendChild(m);
+  const q=DATA.quadrants;
+  if(q&&q.correlations&&q.correlations.length){
+    const cw=el("div","corrbox");cw.style.marginTop="14px";
+    q.correlations.slice(0,2).forEach(p=>{const cp=el("div","cpair");
+      cp.appendChild(el("b",null,"r = "+p.r.toFixed(2)));
+      cp.appendChild(el("small",null,p.a+" vs "+p.b));cw.appendChild(cp);});
+    bc.appendChild(cw);
+    bc.appendChild(el("div","note","Near-zero correlation: these are separate markets — which is why they get separate panels below."));}
+  g.appendChild(bc);box.appendChild(g);
+  // FOUR MARKETS
+  box.appendChild(el("div","sec-title","The four markets ",));
+  const QNAMES={sm:["Sealed · Modern","idx_q_sm"],gv:["Singles · Vintage","idx_q_gv"],
+                gm:["Singles · Modern","idx_q_gm"],sv:["Sealed · Vintage","idx_q_sv"]};
+  const qg=el("div","quad-grid");
+  [["sm"],["gm"],["sv"],["gv"]].forEach(([k])=>{
+    const [label,iid]=QNAMES[k];const ix=IX[iid];
+    const c=el("div","card quad");
+    const qh=el("div","qhead");qh.appendChild(el("span","qname",label));
+    if(ix&&ix.temp)qh.appendChild(tempChip(ix.temp));c.appendChild(qh);
+    if(!ix){c.appendChild(el("div","empty","Not enough full-history assets yet"));qg.appendChild(c);return;}
+    c.appendChild(el("div","grow",grow100(ix.level)));
+    c.appendChild(el("div","qsub",fp(ix.r30)+" 30d · "+fp(ix.window,0)+" since "+(META.windowLabel||"start")+" · "+ix.members.length+" assets"));
+    const cb2=el("div");c.appendChild(cb2);
+    setTimeout(()=>lineChart(cb2,[{name:label,color:S[0],pts:ix.series.map((v,j)=>[Math.min(j*7,N_DAYS-1),v])}],
+      {h:120,area:true,yFmt:v=>v.toFixed(0)}),0);
+    // top mover in this quadrant (by 30d, eligible)
+    const pool=ix.members.map(id=>BYID[id]).filter(x=>x&&x.eligible.eligible&&x.metrics.r30);
+    pool.sort((a2,b2)=>Math.abs(MP(b2,"r30"))-Math.abs(MP(a2,"r30")));
+    if(pool[0]){const mv=pool[0];const row=el("div","qmover");row.onclick=()=>go("product",mv.id);
+      const im=cardImg(mv,"200x200");if(im)row.appendChild(im);
+      const tx=el("span");tx.appendChild(el("b",null,mv.name));
+      tx.appendChild(document.createTextNode(" is this market's big mover: "));
+      tx.appendChild(deltaSpan(MP(mv,"r30")));
+      tx.appendChild(document.createTextNode(" in 30 days ("+fm(mv.price)+")"));
+      row.appendChild(tx);c.appendChild(row);}
+    qg.appendChild(c);});
+  box.appendChild(qg);
+  // rotation ribbon
+  if(q&&q.rotation&&q.rotation.length){
+    box.appendChild(el("div","sec-title","Market rotation — who led each quarter ",));
+    const rc=el("div","card");const rr=el("div","rotation");
+    const QCOLOR={sm:S[0],gm:S[1],sv:S[2],gv:S[3]};
+    q.rotation.forEach(rq=>{const b=el("div","rq");
+      b.style.borderColor=QCOLOR[rq.leader];b.style.background="color-mix(in oklab,"+QCOLOR[rq.leader]+" 12%,var(--surface))";
+      b.appendChild(el("div","ql",rq.q));
+      b.appendChild(el("div","qn",QNAMES[rq.leader]?QNAMES[rq.leader][0].replace(" · ","·"):rq.leader));
+      const v=el("div","qv "+pcls(rq.ret[rq.leader]));v.textContent=fp(rq.ret[rq.leader]);
+      b.appendChild(v);
+      b.title=Object.entries(rq.ret).map(([k2,v2])=>QNAMES[k2][0]+": "+fp(v2)).join("  ·  ");
+      rr.appendChild(b);});
+    rc.appendChild(rr);
+    rc.appendChild(el("div","note","The leadership baton passes between the four markets — hover a quarter for all four returns. This rotation is why blended \"whole market\" charts mislead."));
+    box.appendChild(rc);}
   // briefing
   box.appendChild(el("div","sec-title","Market briefing"));
   const bg=el("div","grid g2");
@@ -193,8 +241,10 @@ function boardCard(b,seg,cls){
   if(!items.length){c.appendChild(el("div","empty","No qualifying assets in this filter"));return c;}
   items.forEach((a,i)=>{const li=el("li");const btn=el("button");
     btn.appendChild(el("span","rank",String(i+1)));
-    const n=el("span","bn");n.appendChild(document.createTextNode(a.name+(a.cond==="graded"?` · ${a.gradeCo} ${a.grade}`:"")));
+    const im=cardImg(a,"200x200");if(im)btn.appendChild(im);
+    const n=el("span","bn");n.appendChild(document.createTextNode(a.name));
     n.appendChild(el("small",null,a.set+" · "+fm(a.price)));btn.appendChild(n);
+    if(a.scores.temp)btn.appendChild(tempChip(a.scores.temp,true));
     const v=el("span","bv");const raw=b.val(a);v.textContent=raw;
     if(String(raw).startsWith("+"))v.classList.add("up");if(String(raw).startsWith("-")||String(raw).startsWith("−"))v.classList.add("down");
     btn.appendChild(v);btn.onclick=()=>go("product",a.id);li.appendChild(btn);ol.appendChild(li);});
@@ -288,13 +338,18 @@ function vIndexes(box){
   box.appendChild(el("div","sub","Transparent, rules-based baskets. Cap-weighted indexes cap any single asset at 10% so one trophy card can't distort the read; character and format indexes are equal-weighted. Trophy assets and mid-window releases are excluded."));
   const g=el("div","grid g2");
   DATA.indexes.forEach(ix=>{
-    const c=el("div","card");const top=el("div");top.style.cssText="display:flex;justify-content:space-between;align-items:baseline;gap:10px";
-    const l=el("div");const nm=el("button");nm.style.cssText="font-size:14.5px;font-weight:700;padding:0";
-    nm.textContent=ix.name;nm.onclick=()=>go("index",ix.id);l.appendChild(nm);
-    l.appendChild(el("div","hint",ix.desc+" · "+ix.weighting+" · "+ix.members.length+" members"));top.appendChild(l);
+    const c=el("div","card idxcard");const top=el("div");top.style.cssText="display:flex;justify-content:space-between;gap:10px";
+    const l=el("div");
+    const nrow=el("div");nrow.style.cssText="display:flex;align-items:center;gap:8px;flex-wrap:wrap";
+    const nm=el("button");nm.style.cssText="font-size:14.5px;font-weight:700;padding:0";
+    nm.textContent=ix.name;nm.onclick=()=>go("index",ix.id);nrow.appendChild(nm);
+    if(ix.temp)nrow.appendChild(tempChip(ix.temp,true));l.appendChild(nrow);
+    l.appendChild(el("div","grow",grow100(ix.level)));
+    l.appendChild(el("div","hint","If you'd put $100 into this basket in "+(META.windowLabel||"Jan 2025")+" · "+ix.members.length+" members · "+ix.weighting));
+    top.appendChild(l);
     const rv=el("div");rv.style.textAlign="right";
-    rv.appendChild(el("div","val",ix.level.toFixed(1))).style.cssText="font-size:20px;font-weight:650";
-    const d=el("div","delta "+pcls(ix.r30));d.textContent=fp(ix.r30)+" 30d · "+fp(ix.window)+" since Jan-25";rv.appendChild(d);
+    const d=el("div","delta "+pcls(ix.r30));d.textContent=fp(ix.r30)+" · 30d";rv.appendChild(d);
+    const d2=el("div","note");d2.textContent="level "+ix.level.toFixed(1);rv.appendChild(d2);
     top.appendChild(rv);c.appendChild(top);
     const sp=el("div");sp.style.marginTop="8px";sp.appendChild(spark(ix.series.map((v,j)=>[j,v]),260,36,cssv("--s1")));c.appendChild(sp);
     g.appendChild(c);});
@@ -464,4 +519,139 @@ function vMethod(box){
   items.forEach(([t,d])=>{const kv=el("div");kv.style.padding="8px 0";
     kv.appendChild(el("b",null,t+" — "));kv.appendChild(el("span","note",d));c.appendChild(kv);});
   box.appendChild(c);
+}
+
+/* ================= MARKET MAP (treemap) ================= */
+const mapState={drill:null,cls:"all",metric:"r30"};
+function vMarketMap(box){
+  box.appendChild(el("div","h1","Market map"));
+  box.appendChild(el("div","sub","Every tile is sized by tracked market value and colored by price change — green rising, red falling, with the % printed on every readable tile. Click a set to drill into its cards; click a card for its full page."));
+  const f=el("div","filters");
+  pills(f,"Class",[["all","All"],["single","Singles"],["sealed","Sealed"]],mapState.cls,v=>{mapState.cls=v;mapState.drill=null;render();});
+  pills(f,"Color by",[["r30","30-day change"],["mom","Month-over-month"],["r90","3-month change"]],mapState.metric,v=>{mapState.metric=v;render();});
+  if(mapState.drill){const back=el("button","pill on","← All sets");back.onclick=()=>{mapState.drill=null;render();};f.appendChild(back);}
+  box.appendChild(f);
+  const card=el("div","card");const holder=el("div","treemap");card.appendChild(holder);box.appendChild(card);
+  const leg=el("div","tm-legend");
+  leg.appendChild(el("span",null,"falling"));
+  [-12,-6,0,6,12].forEach(v=>{const sw=el("span","sw");sw.style.background=heatColor(v,1.4);leg.appendChild(sw);});
+  leg.appendChild(el("span",null,"rising · tile size = tracked value ("+(mapState.drill?"price":"sum of set's tracked prices")+")"));
+  card.appendChild(leg);
+  const mval=a=>{const mm=a.metrics[mapState.metric];return mm?mm.pct:null;};
+  const pool=ASSETS.filter(a=>(mapState.cls==="all"||a.type===mapState.cls)&&!a.trophy);
+  setTimeout(()=>{
+    const W=holder.clientWidth||900,H=Math.min(640,Math.max(430,W*0.52));
+    holder.style.height=H+"px";
+    let tiles;
+    if(!mapState.drill){
+      const groups={};
+      pool.forEach(a=>{const g=groups[a.set]=groups[a.set]||{name:a.set,v:0,items:[],rs:[]};
+        g.v+=a.price;g.items.push(a);const r=mval(a);if(r!=null)g.rs.push(r);});
+      tiles=Object.values(groups).filter(g=>g.v>50&&g.items.length>=1)
+        .map(g=>({name:g.name,v:g.v,pct:median(g.rs),n:g.items.length,drill:g.name}))
+        .sort((x,y)=>y.v-x.v).slice(0,48);
+    }else{
+      tiles=pool.filter(a=>a.set===mapState.drill)
+        .map(a=>({name:a.name,v:a.price,pct:mval(a),id:a.id,price:a.price,asset:a}))
+        .sort((x,y)=>y.v-x.v).slice(0,80);
+    }
+    if(!tiles.length){holder.appendChild(el("div","empty","Nothing to map with these filters"));return;}
+    squarify(tiles,0,0,W,H);
+    tiles.forEach(t=>{
+      const d=el("div","tmtile");
+      d.style.left=t.x+"px";d.style.top=t.y+"px";d.style.width=t.w+"px";d.style.height=t.h+"px";
+      d.style.background=heatColor(t.pct,1.4);
+      const big=t.w>70&&t.h>44;
+      if(big){d.appendChild(el("div","tn",t.name));
+        const bot=el("div","tv",fp(t.pct));d.appendChild(bot);}
+      d.addEventListener("pointermove",ev=>showTip(ev.clientX,ev.clientY,tp=>{
+        if(t.asset){const im=cardImg(t.asset,"200x200");if(im){im.style.cssText="width:64px;height:64px;object-fit:contain;display:block;margin-bottom:5px";tp.appendChild(im);}}
+        tp.appendChild(el("div","tdate",t.name));
+        const r1=el("div","trow");r1.appendChild(el("span","tn",mapState.drill?"Price":"Tracked value"));
+        r1.appendChild(el("span","tv",fmc(t.price!=null?t.price:t.v)));tp.appendChild(r1);
+        const r2=el("div","trow");r2.appendChild(el("span","tn",{r30:"30-day",mom:"MoM",r90:"3-month"}[mapState.metric]));
+        r2.appendChild(el("span","tv "+pcls(t.pct),fp(t.pct)));tp.appendChild(r2);
+        if(t.n)tp.appendChild(el("div","tdate",t.n+" tracked assets — click to drill in"));}));
+      d.addEventListener("pointerleave",hideTip);
+      d.onclick=()=>{hideTip();if(t.drill){mapState.drill=t.drill;render();}else if(t.id)go("product",t.id);};
+      holder.appendChild(d);});
+  },0);
+  box.appendChild(el("div","note","Accessibility note: change is encoded twice — color and the printed % on every readable tile; the same data lives in the Screener as a sortable table."));
+}
+
+/* ================= LEARN THE BASICS ================= */
+function vLearn(box){
+  box.appendChild(el("div","h1","Learn the basics"));
+  box.appendChild(el("div","sub","Everything on this site, explained like you're smart but have never touched a stock chart. Three minutes. And remember: any dotted-underlined word anywhere on the site shows its meaning when you hover or tap it."));
+  // 60-second version
+  const c0=el("div","card");c0.appendChild(el("h3",null,"The 60-second version"));
+  const sx=el("div","sixty");
+  [["Every price here is real — what things actually sold for on TCGplayer, recorded every day since January 2025."],
+   ["We track two different worlds: single cards, and factory-sealed products (boxes, ETBs). They rise and fall independently — so they're never mixed."],
+   ["Big numbers are shown as growth of $100: \"$100 → $230\" means a $100 stake at the start would be $230 now. No finance degree required."],
+   ["Temperature chips are the fastest read: 🔥 HOT means rising fast, ❄ COLD means falling hard, → STAGNANT means going sideways."],
+   ["Scores run 0–100. Above ~65 is strong, below ~35 is weak, 50 is neutral. Hover any score for what it measures."],
+   ["Anything the data can't support is hidden, not guessed — and model forecasts are always labeled as estimates."]]
+   .forEach(([t])=>sx.appendChild(el("div",null,t)));
+  c0.appendChild(sx);box.appendChild(c0);
+  // concept groups
+  const groups=[
+   ["Prices & changes",[
+    ["Market price","What this item actually sells for right now, based on completed TCGplayer sales — not the higher prices sellers *ask*.","Like a home's sale price vs its listing price."],
+    ["30-day / 6-month change","Today's price versus 30 days or 6 months ago, as a percent. Green up, red down.","The 'how's it been going' number."],
+    ["Month-over-month (MoM)","End of last month vs the month before. A clean calendar comparison that ignores mid-month wiggles.","Comparing photos taken on the 1st of each month."],
+    ["Growth of $100","What $100 invested at the start (Jan 2025) would be worth today. It's our favorite way to show long-run performance.","$100 → $230 = it more than doubled."],
+    ["Window high / low","The best and worst price since Jan 2025, and how far today sits from each.","'4% below its all-time best' tells you more than a raw price."]]],
+   ["The weather system",[
+    ["Temperature","One glance = one verdict. 🔥 HOT: rising fast, above trend. ↗ WARMING: gently rising. → STAGNANT: sideways. ↘ COOLING: drifting down. ❄ COLD: falling, below trend.","A weather report for a card."],
+    ["Trend lines (50 & 200-day averages)","The price smoothed over the last 50 or 200 days. Price above its line = uptrend; below = downtrend. The dashed lines on every chart.","A moving 'usual price' the market keeps returning to."],
+    ["Market breadth","What share of everything we track is above its own trend line. 70% = broad rally; 25% = weakness nearly everywhere.","Is the whole tide rising, or just a few boats?"]]],
+   ["The scores (all 0–100)",[
+    ["Momentum","Is it climbing right now? Blends the last week, month and quarter. 50 = flat.","A speedometer, not a destination."],
+    ["Heat","Momentum plus proof: all horizons rising, above trend, near its high. Powers the 'Hottest' boards — hot means a confirmed run, not one lucky day.","The difference between a hot streak and a hot minute."],
+    ["Volatility","How bumpy the ride is. High = big swings both ways — faster gains AND faster losses.","Rollercoaster rating."],
+    ["Stability","The calm twin of volatility: high = steady lane, few surprises.","Good for sleeping at night."],
+    ["Spread tightness","How closely listings hug the market price. Tight = you can actually buy or sell near the quote. Loose = the quote is soft; haggle.","A tight spread is a busy, honest marketplace stall."],
+    ["Confidence","How much to trust the quoted price: daily data on most days + calm trading + tight listings = high trust.","Low confidence = squint at the number."],
+    ["Investment quality","The 'could I comfortably hold this for a year?' blend: steady trend, calm price, trusted data, tight spread.","The buy-and-hold report card."],
+    ["Breakout probability","The model's odds of a new high soon. A forecast — treat it like the weather app, not a promise.","70% chance of rain still means pack a jacket, not a guarantee."]]],
+   ["Rankings, indexes & the map",[
+    ["Eligibility rules","To appear in rankings an item needs: a $5+ price ($25 sealed), a real price most days, 4+ months of history. This keeps junk and flukes off the boards.","Bouncer at the leaderboard door."],
+    ["Meaningful moves","Gainer/loser boards weigh percent AND dollars, so a 1¢ card tripling never outranks a $600 card gaining $200.","Percent alone lies; dollars keep it honest."],
+    ["Index","Many items tracked as one basket-number, like the S&P 500. We show it as growth of $100; the raw 'level' started at 100 in Jan 2025.","The market's team score instead of one player's."],
+    ["The four markets","Sealed vs singles, vintage vs modern — measured correlations are near zero, so we treat them as four separate markets with their own panels and leaders.","Four different games being played on one field."],
+    ["Market map","Rectangles sized by tracked money, colored by change (green up, red down). Click a set to see its cards.","A satellite photo of the whole market."]]],
+   ["Honesty labels",[
+    ["Thin market","Rarely-traded items (like vintage booster boxes) get flagged: one sale can move their price a lot, so they're excluded from momentum boards.","Small pond, big splashes."],
+    ["Coverage","The share of days an item actually had a price. Low coverage = sporadic, less trustworthy data.","Attendance record for the data."],
+    ["Scenarios (bull / base / bear)","Three model-projected 6-month paths from current trend and choppiness. Estimates that frame thinking — never guarantees.","Optimist, realist, pessimist — all three shown."],
+    ["What we don't know yet","Sales counts, listing depth, eBay prices and graded-card values aren't collected yet. Anything needing them is hidden — never faked.","If a number would be a guess, you won't see a number."]]],
+  ];
+  groups.forEach(([title,items])=>{
+    box.appendChild(el("div","sec-title",title));
+    const g=el("div","learn-grid");
+    items.forEach(([term,body,analogy])=>{
+      const lc=el("div","learn-card");lc.appendChild(el("b",null,term));
+      lc.appendChild(el("p",null,body));
+      lc.appendChild(el("div","good","💡 "+analogy));
+      g.appendChild(lc);});
+    box.appendChild(g);});
+  // reading a product page
+  box.appendChild(el("div","sec-title","How to read a card's page, top to bottom"));
+  const rp=el("div","card");const ol=el("ul","risklist");
+  ["Header: the card, its temperature, today's market price, and how it's moved (7 days → 1 year).",
+   "Score chips: the 0–100 report card. Hover any chip for its meaning.",
+   "The chart: real daily prices with its 50/200-day trend lines. Use the range buttons (1M → All).",
+   "Listing structure: how today's listings are priced — a tight low-to-mid gap means the quote is solid.",
+   "Data coverage: how many real price days back this up, and what isn't collected yet.",
+   "Performance table: every time window, in % and dollars.",
+   "Scenarios: the model's bull / base / bear 6-month sketch — estimates, clearly labeled.",
+   "Key risks: what could go wrong, in plain words.",
+   "Comparables: similar cards, one click away."].forEach(t=>ol.appendChild(el("li",null,t)));
+  rp.appendChild(ol);box.appendChild(rp);
+  const cta=el("div","callout");cta.style.marginTop="14px";
+  cta.appendChild(document.createTextNode("Want the exact formulas behind every score? They're all published on the "));
+  const lk=el("a",null,"Methodology page");lk.href="#";lk.onclick=e=>{e.preventDefault();go("methodology");};
+  cta.appendChild(lk);cta.appendChild(document.createTextNode(". Nothing here is financial advice — it's a very well-organized telescope."));
+  box.appendChild(cta);
 }

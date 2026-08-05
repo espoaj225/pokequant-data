@@ -14,9 +14,13 @@ function vProduct(box){
   box.appendChild(el("div","crumb",(a.type==="sealed"?"Sealed":"Singles")+" · "+a.set+(a.num?" · #"+a.num:"")));
   // header
   const ph=el("div","phead");
+  const lwrap=el("div");lwrap.style.cssText="display:flex;gap:16px;align-items:flex-start";
+  const hero=cardImg(a,"400x400","cardhero");if(hero)lwrap.appendChild(hero);
   const left=el("div");
-  const ttl=el("div","h1",a.name);
-  left.appendChild(ttl);
+  const trow=el("div");trow.style.cssText="display:flex;align-items:center;gap:10px;flex-wrap:wrap";
+  trow.appendChild(el("div","h1",a.name));
+  if(s.temp)trow.appendChild(tempChip(s.temp));
+  left.appendChild(trow);
   const bd=el("div");
   const badges=[[a.era==="vintage"?"VINTAGE":"MODERN",""],[a.subEra,""],[a.lang==="JP"?"JAPANESE":"ENGLISH",""],
     [a.type==="sealed"?"FACTORY SEALED":"RAW",""],
@@ -26,7 +30,7 @@ function vProduct(box){
     ["REAL TCGPLAYER HISTORY · "+m.realDays+" DAYS","acc"],
     a.trophy?["THIN MARKET — SPORADIC PRICING","wrn"]:null].filter(Boolean);
   badges.forEach(([t,cls])=>bd.appendChild(el("span","badge "+cls,t)));
-  left.appendChild(bd);ph.appendChild(left);
+  left.appendChild(bd);lwrap.appendChild(left);ph.appendChild(lwrap);
   const right=el("div");right.style.textAlign="right";
   const pw=el("div");pw.appendChild(el("span","pricebig",fm(a.price)));
   pw.appendChild(starBtn(a));right.appendChild(pw);
@@ -255,13 +259,16 @@ function vProductLazy(box,pid){
       if(!e){holder.appendChild(el("div","empty","No price series available for this product."));return;}
       const m=liteMetrics(e.s,e.p),S=SER();
       holder.appendChild(el("div","crumb","Full catalog · "+row[2]));
-      const ph=el("div","phead");const left=el("div");
+      const ph=el("div","phead");
+      const lz=el("div");lz.style.cssText="display:flex;gap:16px;align-items:flex-start";
+      const him=cardImg(pid,"400x400","cardhero");if(him)lz.appendChild(him);
+      const left=el("div");
       left.appendChild(el("div","h1",row[1]));
       const bd=el("div");
       [["FULL CATALOG",""],["REAL TCGPLAYER HISTORY · "+e.rd+" DAYS","acc"],
        e.cov<70?["THIN MARKET — SPORADIC PRICING","wrn"]:null].filter(Boolean)
         .forEach(([t,c])=>bd.appendChild(el("span","badge "+c,t)));
-      left.appendChild(bd);ph.appendChild(left);
+      left.appendChild(bd);lz.appendChild(left);ph.appendChild(lz);
       const right=el("div");right.style.textAlign="right";
       right.appendChild(el("span","pricebig",fm(m.price)));
       right.appendChild(el("div","note","TCGplayer market · "+META.generated));

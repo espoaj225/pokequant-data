@@ -67,13 +67,14 @@ def collect_today():
                                if ed.get("name") == "Rarity"), "")
                 cat_rows.append([cat_key, gid, g.get("name", ""), (g.get("publishedOn") or "")[:10],
                                  pr["productId"], nm, num, rarity,
-                                 1 if (not num and SEALED_RE.search(nm)) else 0])
+                                 1 if (not num and SEALED_RE.search(nm)) else 0,
+                                 pr.get("imageUrl") or ""])
     path = write_day(ds, price_rows)
     print(f"{ds}: {len(price_rows)} price rows across {n_groups} groups -> {path}")
     with gzip.open(CATALOG, "wt", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["category", "group_id", "group_name", "published", "product_id",
-                    "name", "number", "rarity", "is_sealed"])
+                    "name", "number", "rarity", "is_sealed", "image_url"])
         w.writerows(cat_rows)
     print(f"catalog: {len(cat_rows)} products -> {CATALOG}")
     if len(price_rows) < 1000:

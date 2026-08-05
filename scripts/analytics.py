@@ -59,6 +59,9 @@ del aux_frames
 CAT = pd.read_csv(CATALOG_PATH, dtype={"group_id": "int32", "product_id": "int32"})
 CAT["number"] = CAT["number"].fillna("").astype(str)
 CAT["rarity"] = CAT["rarity"].fillna("").astype(str)
+if "image_url" not in CAT.columns:  # catalogs collected before v5 lack images
+    CAT["image_url"] = ""
+CAT["image_url"] = CAT["image_url"].fillna("").astype(str)
 CAT = CAT.drop_duplicates("product_id").set_index("product_id")
 print(f"catalog: {len(CAT):,} products")
 
@@ -276,7 +279,25 @@ def scores_for(m):
         0.13*s["spread"] + 0.10*(100 + np.clip(m["ath"]["fromPct"], -50, 0)*2)*0.5, 0, 100)), 1)
     near_ath = max(0.0, 1 + m["ath"]["fromPct"] / 12)
     s["breakout"] = round(float(logistic(-2.4 + 2.8*near_ath + 1.7*(s["momentum"]-50)/50)), 3)
+    # Heat Score: momentum + multi-horizon agreement + trend position + near-high, spread-penalized
+    r7v = m["r7"]["pct"] if m["r7"] else 0
+    agree = sum(1 for v in (r7v, r30, r90) if v > 1) - sum(1 for v in (r7v, r30, r90) if v < -1)
+    heat = (0.55 * s["momentum"] + 7 * agree
+            + (8 if (m["vsMa50"] or 0) > 0 else -8) + (5 if (m["vsMa200"] or 0) > 0 else -5)
+            + 12 * max(0.0, 1 + (m["ath"]["fromPct"] or -99) / 15)
+            - 0.35 * max(0.0, (m["spreadPct"] or 10) - 10))
+    s["heat"] = round(float(np.clip(heat, 0, 100)), 1)
     return s
+
+def temperature(m, s):
+    """Plain-language market climate. Order matters: strongest signals first."""
+    r30 = m["r30"]["pct"] if m["r30"] else 0
+    above50 = (m["vsMa50"] or 0) > 0
+    if r30 >= 8 and above50 and s["momentum"] >= 62: return "hot"
+    if r30 <= -8 and not above50 and s["momentum"] <= 38: return "cold"
+    if r30 >= 3 and s["momentum"] >= 53: return "warming"
+    if r30 <= -3 or (not above50 and s["momentum"] < 45): return "cooling"
+    return "stagnant"
 
 def eligibility(price, m, s, is_sealed):
     reasons = []
@@ -357,10 +378,13 @@ for pid in tier:
     s = SERIES[pid]
     m, now = compute(pid, s)
     sc = scores_for(m)
+    sc["temp"] = temperature(m, sc)
     is_sealed = meta["sealed"]
     aid = meta["kitId"] or f"p{pid}"
+    img = str(CAT.loc[pid, "image_url"]) if pid in CAT.index else ""
     rnd = 3 if now < 2 else 2
     assets.append({
+        "img": img or None,
         "id": aid, "pid": pid, "name": meta["name"], "type": "sealed" if is_sealed else "single",
         "set": meta["set"], "num": meta["num"], "rarity": meta["rarity"], "kind": meta["kind"],
         "character": meta["character"], "era": meta["era"], "subEra": meta["subEra"], "lang": meta["lang"],
@@ -383,6 +407,10 @@ def build_indexes():
         ("idx_overall", "PokéQuant Composite", "All full-history eligible assets, price-weighted, 10% cap.", lambda a: True, "cap"),
         ("idx_sealed", "Sealed Product Index", "Full-history sealed products.", lambda a: a["type"] == "sealed", "cap"),
         ("idx_singles", "Singles Index", "Full-history single cards ≥ $5.", lambda a: a["type"] == "single", "cap"),
+        ("idx_q_sm", "Sealed · Modern", "Modern-era factory-sealed products.", lambda a: a["type"] == "sealed" and a["era"] == "modern", "cap"),
+        ("idx_q_sv", "Sealed · Vintage", "WOTC-era factory-sealed products.", lambda a: a["type"] == "sealed" and a["era"] == "vintage", "eq"),
+        ("idx_q_gm", "Singles · Modern", "Modern-era single cards.", lambda a: a["type"] == "single" and a["era"] == "modern", "cap"),
+        ("idx_q_gv", "Singles · Vintage", "WOTC-era single cards.", lambda a: a["type"] == "single" and a["era"] == "vintage", "eq"),
         ("idx_vintage", "Vintage Index", "WOTC-era assets.", lambda a: a["era"] == "vintage", "eq"),
         ("idx_modern", "Modern Index", "Post-WOTC assets.", lambda a: a["era"] == "modern", "cap"),
         ("idx_bb", "Booster Box Index", "Factory-sealed booster boxes.", lambda a: a.get("kind") == "Booster Box", "eq"),
@@ -396,6 +424,18 @@ def build_indexes():
         ("idx_en", "English Product Index", "English full-history assets.", lambda a: a["lang"] == "EN", "cap"),
     ]
     out = []
+    daily_store = {}
+    def idx_temp(series):
+        now = float(series[-1])
+        r30 = pct(now, float(series[-31])) if len(series) > 31 else 0
+        r90 = pct(now, float(series[-91])) if len(series) > 91 else 0
+        ma50 = float(np.mean(series[-50:])) if len(series) >= 50 else now
+        above = now > ma50
+        if r30 >= 6 and above and r90 >= 10: return "hot"
+        if r30 <= -6 and not above: return "cold"
+        if r30 >= 2.5: return "warming"
+        if r30 <= -2.5 or not above: return "cooling"
+        return "stagnant"
     for iid, name, desc, pred, wmode in DEFS:
         members = [a for a in full if pred(a)]
         if len(members) < 2: continue
@@ -418,16 +458,56 @@ def build_indexes():
             w = np.full(len(members), 1 / len(members))
         series = np.nansum(rel * w[:, None], axis=0) * 100
         series = np.concatenate([np.full(base_col, series[0]), series])
+        daily_store[iid] = series
         wk = [round(float(x), 2) for x in series[::7]] + [round(float(series[-1]), 2)]
         def r(days): return round(pct(float(series[-1]), float(series[-days-1])), 2) if len(series) > days else None
         out.append({"id": iid, "name": name, "desc": desc,
                     "weighting": "price-weighted (10% cap)" if wmode == "cap" else "equal-weighted",
                     "members": [a["id"] for a in members], "level": round(float(series[-1]), 2),
-                    "r30": r(30), "r90": r(90), "r180": r(180),
+                    "r30": r(30), "r90": r(90), "r180": r(180), "temp": idx_temp(series),
                     "window": round(pct(float(series[-1]), 100), 2), "series": wk})
-    return out
+    return out, daily_store
 
-indexes = build_indexes()
+indexes, IDX_DAILY = build_indexes()
+
+# ---------------- quadrant rotation + cross-market correlations ----------------
+def quadrant_story():
+    QK = {"sm": "idx_q_sm", "sv": "idx_q_sv", "gm": "idx_q_gm", "gv": "idx_q_gv"}
+    # quarterly returns per quadrant
+    qstarts = []
+    d = date(START.year, ((START.month - 1) // 3) * 3 + 1, 1)
+    while d <= END:
+        qstarts.append(d)
+        d = date(d.year + (1 if d.month > 9 else 0), (d.month + 3 - 1) % 12 + 1, 1)
+    rotation = []
+    for i, qs in enumerate(qstarts):
+        qe = min(qstarts[i + 1] - timedelta(days=1) if i + 1 < len(qstarts) else END, END)
+        i0 = max(0, (qs - START).days); i1 = min(N - 1, (qe - START).days)
+        if i1 - i0 < 20: continue
+        rets = {}
+        for k, iid in QK.items():
+            s = IDX_DAILY.get(iid)
+            if s is None or i1 >= len(s): continue
+            rets[k] = round(pct(float(s[i1]), float(s[i0])), 1)
+        if not rets: continue
+        leader = max(rets, key=lambda k: rets[k])
+        rotation.append({"q": f"Q{(qs.month - 1) // 3 + 1} '{qs.strftime('%y')}",
+                         "ret": rets, "leader": leader})
+    # weekly-return correlations between the classic splits
+    def corr(a, b):
+        sa, sb = IDX_DAILY.get(a), IDX_DAILY.get(b)
+        if sa is None or sb is None: return None
+        ra = np.diff(np.log(sa[::7])); rb = np.diff(np.log(sb[::7]))
+        n = min(len(ra), len(rb))
+        return round(float(np.corrcoef(ra[-n:], rb[-n:])[0, 1]), 2)
+    correlations = [p for p in [
+        {"a": "Sealed", "b": "Singles", "r": corr("idx_sealed", "idx_singles")},
+        {"a": "Vintage", "b": "Modern", "r": corr("idx_vintage", "idx_modern")},
+        {"a": "Sealed·Modern", "b": "Singles·Vintage", "r": corr("idx_q_sm", "idx_q_gv")},
+    ] if p["r"] is not None]
+    return {"rotation": rotation, "correlations": correlations}
+
+QUADRANTS = quadrant_story()
 
 def aggregates():
     def group(keyfn, minn=3):
@@ -481,6 +561,9 @@ METHODOLOGY = {
     "eligibility": "Ranking eligibility: singles ≥ $5, sealed ≥ $25; ≥ 120 days of real data; a real price on ≥ 70% of days; Confidence ≥ 40. Thin/trophy assets stay visible on product pages but off momentum boards.",
     "indexes": f"Indexes contain full-history (from {WINDOW_LABEL}), non-trophy assets with ≥85% coverage, bounded to the 150 largest members. Price-weighted with a 10% cap, or equal-weighted for character/format baskets.",
     "scenarios": "Scenario engine: base case extends damped 90-day real drift over 6 months; bull/bear bands ±~1.1× realized 90-day volatility scaled to horizon. Estimates, not predictions.",
+    "heat": "Heat Score (0–100). Momentum (55%) plus multi-horizon trend agreement (1-week, 1-month, 3-month all pointing the same way), position above the 50- and 200-day averages, proximity to the window high, minus a wide-spread penalty. Powers the Hottest boards; 'hot' means confirmed strength, not just a spike.",
+    "temperature": "Market temperature. Plain-language climate per asset and index: HOT (≥+8% 30d, above trend, strong momentum) · WARMING (≥+3%, positive momentum) · STAGNANT (range-bound) · COOLING (≤−3% or below trend) · COLD (≤−8%, below trend, weak momentum). Always shown as icon + label, never color alone.",
+    "quadrantsNote": "Four-markets view. Sealed/singles and vintage/modern returns barely correlate (measured weekly correlations shown on the overview), so the terminal treats Sealed·Modern, Sealed·Vintage, Singles·Modern and Singles·Vintage as four separate markets with their own indexes, temperatures and leaders.",
     "dataStatus": (f"COLLECTED (real): daily TCGplayer prices for EVERY Pokémon product (EN + JP), {WINDOW_LABEL} → present. "
                    "The terminal pre-computes full analytics for every product ≥ $5 plus all sealed items; every other product "
                    "is searchable and charts on demand from the same real data. NOT YET COLLECTED: sales counts, listing depth, "
@@ -506,6 +589,7 @@ data = {
                             "the rest are searchable and chart on demand. Sales counts, listing depth, eBay and graded data "
                             "are NOT yet collected — dependent metrics are disabled, not estimated. Not financial advice.")},
     "assets": assets, "indexes": indexes, "aggregates": aggregates(),
+    "quadrants": QUADRANTS,
     "portfolio": PORTFOLIO, "methodology": METHODOLOGY, "marketContext": ctx(),
 }
 os.makedirs(DOCS, exist_ok=True)
