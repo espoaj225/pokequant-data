@@ -1,4 +1,11 @@
 asset_id,type,category_id,group_id,group_name,product_id,product_name,display_name
+base1-4,single,3,604,Base Set,42382,Charizard,Charizard (Base Set)
+base1-2,single,3,604,Base Set,42360,Blastoise,Blastoise (Base Set)
+base1-15,single,3,604,Base Set,42355,Venusaur,Venusaur (Base Set)
+base1-16,single,3,604,Base Set,42356,Zapdos,Zapdos (Base Set)
+base1-58,single,3,604,Base Set,42402,Pikachu,Pikachu (Base Set)
+neo1-9,single,3,1396,Neo Genesis,86903,Lugia,Lugia (Neo Genesis)
+gym2-2,single,3,1440,Gym Challenge,83861,Blaine's Charizard,Blaine's Charizard
 swsh7-215,single,3,2848,SWSH07: Evolving Skies,246723,Umbreon VMAX (Alternate Art Secret),Umbreon VMAX Alt Art
 swsh7-212,single,3,2848,SWSH07: Evolving Skies,246704,Sylveon VMAX (Alternate Art Secret),Sylveon VMAX Alt Art
 swsh7-205,single,3,2848,SWSH07: Evolving Skies,246696,Leafeon VMAX (Alternate Art Secret),Leafeon VMAX Alt Art
@@ -7,20 +14,33 @@ swsh7-218,single,3,2848,SWSH07: Evolving Skies,246733,Rayquaza VMAX (Alternate A
 swsh7-211,single,3,2848,SWSH07: Evolving Skies,246702,Sylveon VMAX (Secret),Sylveon VMAX Rainbow
 swsh7-204,single,3,2848,SWSH07: Evolving Skies,246693,Leafeon VMAX (Secret),Leafeon VMAX Rainbow
 swsh7-208,single,3,2848,SWSH07: Evolving Skies,246755,Glaceon VMAX (Secret),Glaceon VMAX Rainbow
+swsh7-75,single,3,2848,SWSH07: Evolving Skies,246701,Sylveon VMAX,Sylveon VMAX
+swsh7-65,single,3,2848,SWSH07: Evolving Skies,246690,Espeon VMAX,Espeon VMAX
+swsh7-41,single,3,2848,SWSH07: Evolving Skies,246753,Glaceon VMAX,Glaceon VMAX
+swsh7-8,single,3,2848,SWSH07: Evolving Skies,246691,Leafeon VMAX,Leafeon VMAX
 swsh12pt5gg-GG69,single,3,17689,SWSH: Crown Zenith: Galarian Gallery,478100,Giratina VSTAR (Secret),Giratina VSTAR Gold
 swsh35-74,single,3,2685,Champion's Path,223073,Charizard VMAX (Secret),Charizard VMAX (Champion's Path)
 swsh35-25,single,3,2685,Champion's Path,223018,Machoke,Machoke (Champion's Path)
+swsh45sv-SV107,single,3,2781,Shining Fates: Shiny Vault,232496,Charizard VMAX,Charizard VMAX Shiny
 cel25c-4,single,3,2931,Celebrations: Classic Collection,250320,Charizard,Charizard Classic Collection
 sv3pt5-199,single,3,23237,SV: Scarlet & Violet 151,517045,Charizard ex - 199/165,Charizard ex SIR (151)
 sv3pt5-205,single,3,23237,SV: Scarlet & Violet 151,517051,Mew ex - 205/165,Mew ex Gold (151)
+sv3pt5-6,single,3,23237,SV: Scarlet & Violet 151,502558,Charizard ex - 006/165,Charizard ex (151)
 sv3pt5-151,single,3,23237,SV: Scarlet & Violet 151,516566,Mew ex - 151/165,Mew ex (151)
+sv3pt5-4,single,3,23237,SV: Scarlet & Violet 151,502555,Charmander - 004/165,Charmander (151)
+sv3pt5-7,single,3,23237,SV: Scarlet & Violet 151,502548,Squirtle - 007/165,Squirtle (151)
 sv4pt5-234,single,3,23353,SV: Paldean Fates,535090,Charizard ex - 234/091,Charizard ex Shiny SIR
+sv4pt5-54,single,3,23353,SV: Paldean Fates,534416,Charizard ex - 054/091,Charizard ex (Paldean Fates)
 sv8pt5-161,single,3,23821,SV: Prismatic Evolutions,610516,Umbreon ex - 161/131,Umbreon ex SIR
 sv8pt5-179,single,3,23821,SV: Prismatic Evolutions,610534,Pikachu ex - 179/131,Pikachu ex Gold
 sv8pt5-167,single,3,23821,SV: Prismatic Evolutions,610522,Eevee ex - 167/131,Eevee ex SIR
 sv8pt5-156,single,3,23821,SV: Prismatic Evolutions,610511,Sylveon ex - 156/131,Sylveon ex SIR
 sv8pt5-149,single,3,23821,SV: Prismatic Evolutions,610504,Vaporeon ex - 149/131,Vaporeon ex SIR
 sv8pt5-155,single,3,23821,SV: Prismatic Evolutions,610510,Espeon ex - 155/131,Espeon ex SIR
+sv8pt5-60,single,3,23821,SV: Prismatic Evolutions,610415,Umbreon ex - 060/131,Umbreon ex
+sv8pt5-59,single,3,23821,SV: Prismatic Evolutions,610414,Umbreon,Umbreon (Prismatic)
+sv8pt5-28,single,3,23821,SV: Prismatic Evolutions,610383,Pikachu ex - 028/131,Pikachu ex
+sv8pt5-47,single,3,23821,SV: Prismatic Evolutions,610402,Larvitar,Eevee (Prismatic)
 sv2-269,single,3,23120,SV02: Paldea Evolved,497689,Iono - 269/193,Iono SIR
 sv2-254,single,3,23120,SV02: Paldea Evolved,497669,Iono - 254/193,Iono Ultra Rare
 sv2-185,single,3,23120,SV02: Paldea Evolved,497557,Iono - 185/193,Iono
@@ -29,6 +49,7 @@ swsh9-154,single,3,2948,SWSH09: Brilliant Stars,263873,Charizard V (Alternate Fu
 swsh11-186,single,3,3118,SWSH11: Lost Origin,284137,Giratina V (Alternate Full Art),Giratina V Alt Art
 swsh12-186,single,3,3170,SWSH12: Silver Tempest,451834,Lugia V (Alternate Full Art),Lugia V Alt Art
 svp-085,single,3,22872,SV: Scarlet & Violet Promo Cards,518861,Pikachu with Grey Felt Hat,Pikachu with Grey Felt Hat
+sv8-57,single,3,23651,SV08: Surging Sparks,590025,Pikachu ex - 057/191,Pikachu (Surging Sparks)
 sl-base-box,sealed,3,604,Base Set,185731,Base Set Booster Box [Revised Unlimited Edition],Base Set Booster Box
 sl-neo-box,sealed,3,1396,Neo Genesis,193334,Neo Genesis Booster Box [1st Edition],Neo Genesis Booster Box
 sl-evs-box,sealed,3,2848,SWSH07: Evolving Skies,242436,Evolving Skies Booster Box,Evolving Skies Booster Box
@@ -56,4 +77,5 @@ sl-dr-box,sealed,3,24269,SV10: Destined Rivals,624679,Destined Rivals Booster Bo
 sl-jt-box,sealed,3,24073,SV09: Journey Together,610931,Journey Together Booster Box,Journey Together Booster Box
 sl-me1-box,sealed,3,24380,ME01: Mega Evolution,644298,Mega Evolution Booster Box,Mega Evolution Booster Box
 sl-phf-box,sealed,3,24448,ME02: Phantasmal Flames,654137,Phantasmal Flames Booster Box,Phantasmal Flames Booster Box
+sl-jp-terastal,sealed,85,23909,SV8a: Terastal Fest ex,603428,Terastal Fest ex Booster Box,Terastal Festival ex Booster Box (JP)
 sl-jp-151,sealed,85,23599,SV2a: Pokemon Card 151,565243,Pokemon Card 151 Booster Box,Pokemon 151 Booster Box (JP)
