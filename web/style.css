@@ -230,3 +230,14 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
 .sixty div{display:flex;gap:10px;align-items:baseline;font-size:13.5px;color:var(--ink2)}
 .sixty div::before{counter-increment:step;content:counter(step);flex:none;width:22px;height:22px;border-radius:50%;
   background:var(--wash);color:var(--accent);font-weight:700;font-size:12px;display:inline-flex;align-items:center;justify-content:center}
+
+/* ---------- v7: segment bars + filterable tables ---------- */
+.segrow{display:flex;align-items:center;gap:10px;padding:4px 0;font-size:12.5px}
+.segrow .sl{flex:0 0 190px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+.segrow .st{flex:1;position:relative;height:14px;background:var(--surface2);border-radius:4px;overflow:hidden}
+.segrow .st i{position:absolute;top:2px;bottom:2px;border-radius:3px}
+.segrow .st i.pos{background:var(--good)}
+.segrow .st i.neg{background:var(--crit)}
+.segrow .st b{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--baseline)}
+.segrow .sv{flex:0 0 58px;text-align:right;font-variant-numeric:tabular-nums;font-weight:650}
+@media (max-width:700px){.segrow .sl{flex-basis:110px}}

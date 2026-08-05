@@ -1,8 +1,9 @@
 /* ================= PokeQuant views ================= */
 "use strict";
-const NAV=[["sec","Markets"],["overview","◈","Market overview"],["map","▩","Market map"],["singles","▤","Singles desk"],["sealed","▦","Sealed desk"],
+const NAV=[["sec","Markets"],["overview","◈","Market overview"],["hotcold","♨","Hot & Cold"],["map","▩","Market map"],["eras","▣","Era dashboards"],
+  ["singles","▤","Singles desk"],["sealed","▦","Sealed desk"],
   ["rankings","≡","Rankings"],["indexes","∿","Indexes"],
-  ["sec","Research"],["screener","⌕","Screener"],["compare","⇄","Compare"],["alerts","◷","Alert center"],
+  ["sec","Research"],["screener","⌕","Screener"],["support","▁","Support lines"],["compare","⇄","Compare"],["alerts","◷","Alert center"],
   ["sec","My desk"],["watchlist","★","Watchlist"],["portfolio","▥","Portfolio"],
   ["sec","About"],["learn","✦","Learn the basics"],["methodology","ⓘ","Methodology (advanced)"]];
 
@@ -67,7 +68,8 @@ function render(){
   main.appendChild(tb);
   const body=el("div");main.appendChild(body);
   shell.appendChild(main);root.appendChild(shell);
-  const V={overview:vOverview,map:vMarketMap,singles:b=>vDesk(b,"single"),sealed:b=>vDesk(b,"sealed"),rankings:vRankings,
+  const V={overview:vOverview,map:vMarketMap,hotcold:vHotCold,eras:vEras,era:vEraDetail,support:vSupport,
+    singles:b=>vDesk(b,"single"),sealed:b=>vDesk(b,"sealed"),rankings:vRankings,
     indexes:vIndexes,screener:vScreener,compare:vCompare,watchlist:vWatchlist,portfolio:vPortfolio,
     alerts:vAlerts,learn:vLearn,methodology:vMethod,product:vProduct,index:vIndexDetail};
   (V[state.view]||vOverview)(body);
@@ -123,6 +125,14 @@ function pills(box,label,options,current,onpick){
   if(label)box.appendChild(el("span","fl",label));
   options.forEach(([id,lab])=>{const p=el("button","pill"+(current===id?" on":""),lab);
     p.onclick=()=>onpick(id);box.appendChild(p);});}
+function pillsMulti(box,label,options,set,onchange){
+  // multi-select: "All" pill clears; clicking an option toggles it
+  if(label)box.appendChild(el("span","fl",label));
+  const all=el("button","pill"+(set.size?"":" on"),"All");
+  all.onclick=()=>{set.clear();onchange();};box.appendChild(all);
+  options.forEach(id=>{const p=el("button","pill"+(set.has(id)?" on":""),id);
+    p.title="Click to toggle — combine as many as you like";
+    p.onclick=()=>{set.has(id)?set.delete(id):set.add(id);onchange();};box.appendChild(p);});}
 
 /* ================= OVERVIEW ================= */
 function vOverview(box){
@@ -237,7 +247,7 @@ function boardCard(b,seg,cls){
   const c=el("div","card board");const h=el("header");h.appendChild(el("h3",null,b.t));
   h.appendChild(el("div","hint",b.d));c.appendChild(h);
   const ol=el("ol");
-  const items=boardItems(b,seg,cls,8);
+  const items=boardItems(b,seg,cls,8,state.view==="rankings"?state.eras:null);
   if(!items.length){c.appendChild(el("div","empty","No qualifying assets in this filter"));return c;}
   items.forEach((a,i)=>{const li=el("li");const btn=el("button");
     btn.appendChild(el("span","rank",String(i+1)));
@@ -278,31 +288,63 @@ function vDesk(box,type){
     const basePool=b.pool;b.pool=a=>a.type===type&&(basePool?basePool(a):true);
     bg.appendChild(boardCard(b));});
   box.appendChild(bg);
-  // segmentation strips
+  // segmentation: one compact card, dimension picked by pills, signed bars
   box.appendChild(el("div","sec-title",isS?"Performance by segment":"Performance by product type"));
+  const ds=deskState[type];
   const segC=el("div","card");
   const dims=isS
-    ?[["By era",a=>a.subEra],["By character",a=>a.character],["By set",a=>a.set]]
-    :[["By product type",a=>a.kind],["By era",a=>a.subEra],["By language",a=>a.lang==="JP"?"Japanese":"English"]];
-  dims.forEach(([lab,fn])=>{
-    const groups={};pool.forEach(a=>{const k=fn(a);if(!k)return;(groups[k]=groups[k]||[]).push(a);});
-    const rows=Object.entries(groups).filter(([,v])=>v.length>=2).map(([k,v])=>({k,n:v.length,
-      mom:median(v.map(a=>MP(a,"mom")).filter(x=>x!=null)),r180:median(v.map(a=>MP(a,"r180")).filter(x=>x!=null))}))
-      .sort((a,b)=>b.r180-a.r180);
-    if(!rows.length)return;
-    segC.appendChild(el("div","sec-title",lab));
-    const t=el("table");const tr=el("tr");["Segment","Assets","Median MoM","Median 6m"].forEach(h=>{const th=document.createElement("th");th.textContent=h;tr.appendChild(th);});t.appendChild(tr);
-    rows.slice(0,8).forEach(r=>{const trr=el("tr");
-      trr.appendChild(el("td",null,r.k));trr.appendChild(el("td",null,String(r.n)));
-      const t1=document.createElement("td");t1.appendChild(deltaSpan(r.mom));trr.appendChild(t1);
-      const t2=document.createElement("td");t2.appendChild(deltaSpan(r.r180));trr.appendChild(t2);
-      t.appendChild(trr);});
-    segC.appendChild(t);});
+    ?[["Era",a=>a.subEra],["Character",a=>a.character],["Set",a=>a.set],["Language",a=>a.lang==="JP"?"Japanese":"English"]]
+    :[["Product type",a=>a.kind],["Era",a=>a.subEra],["Language",a=>a.lang==="JP"?"Japanese":"English"]];
+  const fseg=el("div","filters");
+  pills(fseg,"Group by",dims.map((d,i)=>[String(i),d[0]]),String(ds.dim),v=>{ds.dim=+v;render();});
+  fseg.appendChild(el("span","fl"," · median 6-month change per group"));
+  segC.appendChild(fseg);
+  const fn=dims[ds.dim][1];
+  const groups={};pool.forEach(a=>{const k=fn(a);if(!k)return;(groups[k]=groups[k]||[]).push(a);});
+  const rows=Object.entries(groups).filter(([,v])=>v.length>=2).map(([k,v])=>({k,n:v.length,
+    r180:median(v.map(a=>MP(a,"r180")).filter(x=>x!=null))})).filter(r=>r.r180!=null)
+    .sort((a,b)=>b.r180-a.r180).slice(0,12);
+  if(rows.length){
+    const mx=Math.max(...rows.map(r=>Math.abs(r.r180)))||1;
+    rows.forEach(r=>{const row=el("div","segrow");
+      row.appendChild(el("span","sl",r.k+" ("+r.n+")"));
+      const track=el("span","st");
+      const bar=el("i",r.r180>=0?"pos":"neg");
+      bar.style.width=(Math.abs(r.r180)/mx*50)+"%";
+      bar.style[r.r180>=0?"left":"right"]="50%";
+      track.appendChild(bar);
+      const mid=el("b");track.appendChild(mid);row.appendChild(track);
+      const v=el("span","sv "+pcls(r.r180));v.textContent=fp(r.r180,0);row.appendChild(v);
+      segC.appendChild(row);});
+  }else segC.appendChild(el("div","empty","Not enough data for this grouping"));
   box.appendChild(segC);
-  // full table
+  // full table with its own filters
   box.appendChild(el("div","sec-title","All tracked "+(isS?"singles":"sealed products"),));
-  const tc=el("div","card");assetTable(tc,pool);box.appendChild(tc);
+  const ft=el("div","filters");
+  const q=el("input");q.placeholder="Filter by name, set, character…";q.value=ds.q;q.style.minWidth="220px";
+  q.oninput=()=>{ds.q=q.value;drawTbl();};ft.appendChild(q);
+  pills(ft,"Price",SEGS.map(s=>[s[0],s[1]]),ds.seg,v=>{ds.seg=v;render();});
+  box.appendChild(ft);
+  const ft2=el("div","filters");
+  pillsMulti(ft2,"Era",erasPresent(),ds.eras,()=>render());
+  pills(ft2," · Language",[["all","All"],["EN","English"],["JP","Japanese"]],ds.lang,v=>{ds.lang=v;render();});
+  box.appendChild(ft2);
+  const count=el("div","hint");box.appendChild(count);
+  const tc=el("div","card");box.appendChild(tc);
+  function fpool(){const needle=ds.q.trim().toLowerCase();
+    return pool.filter(a=>
+      inSeg(a,ds.seg)&&
+      (!ds.eras.size||ds.eras.has(a.subEra))&&
+      (ds.lang==="all"||a.lang===ds.lang)&&
+      (!needle||(a.name+" "+a.set+" "+(a.character||"")).toLowerCase().includes(needle)));}
+  function drawTbl(){tc.textContent="";const p=fpool();
+    count.textContent=p.length+" of "+pool.length+" shown";
+    if(!p.length)tc.appendChild(el("div","empty","Nothing matches these filters"));
+    else assetTable(tc,p);}
+  drawTbl();
 }
+const deskState={single:{dim:0,q:"",eras:new Set(),lang:"all",seg:"all"},
+                 sealed:{dim:0,q:"",eras:new Set(),lang:"all",seg:"all"}};
 function median(arr){if(!arr.length)return null;const s=[...arr].sort((a,b)=>a-b);
   return s.length%2?s[(s.length-1)/2]:(s[s.length/2-1]+s[s.length/2])/2;}
 
@@ -315,6 +357,9 @@ function vRankings(box){
   f.appendChild(el("span","fl"," · Class"));
   pills(f,null,[["all","All"],["single","Singles"],["sealed","Sealed"]],state.cls,id=>{state.cls=id;render();});
   box.appendChild(f);
+  const f2=el("div","filters");
+  pillsMulti(f2,"Era (multi-select)",erasPresent(),state.eras,()=>render());
+  box.appendChild(f2);
   const g=el("div","grid g3");
   BOARDS.forEach(b=>g.appendChild(boardCard(b,state.seg,state.cls)));
   box.appendChild(g);
@@ -373,9 +418,11 @@ function vScreener(box){
   box.appendChild(el("div","sub","Filter the full universe by asset class, era, grading status, price band and minimum scores. Click any column to sort."));
   const f=el("div","filters");
   pills(f,"Class",[["all","All"],["single","Singles"],["sealed","Sealed"]],scr.type,v=>{scr.type=v;render();});
-  pills(f,"Era",[["all","All"],["vintage","Vintage"],["modern","Modern"]],scr.era,v=>{scr.era=v;render();});
-  pills(f,"Condition",[["all","All"],["raw","Raw"],["sealed","Sealed"]],scr.cond,v=>{scr.cond=v;render();});
+  pills(f,"Language",[["all","All"],["EN","English"],["JP","Japanese"]],scr.lang||"all",v=>{scr.lang=v;render();});
   box.appendChild(f);
+  const fEra=el("div","filters");
+  pillsMulti(fEra,"Era (multi-select)",erasPresent(),scr.subEras=scr.subEras||new Set(),()=>render());
+  box.appendChild(fEra);
   const f2=el("div","filters");
   pills(f2,"Price",SEGS.map(s=>[s[0],s[1]]),scr.seg,v=>{scr.seg=v;render();});
   box.appendChild(f2);
@@ -389,8 +436,8 @@ function vScreener(box){
   const count=el("div","hint");box.insertBefore(count,tc);
   function pool(){return ASSETS.filter(a=>
     (scr.type==="all"||a.type===scr.type)&&
-    (scr.era==="all"||a.era===scr.era)&&
-    (scr.cond==="all"||a.cond===scr.cond)&&
+    ((scr.lang||"all")==="all"||a.lang===scr.lang)&&
+    (!scr.subEras||!scr.subEras.size||scr.subEras.has(a.subEra))&&
     inSeg(a,scr.seg)&&
     a.scores.quality>=scr.minQual&&a.scores.confidence>=scr.minConf&&a.scores.momentum>=scr.minMom);}
   function draw(){tc.textContent="";const p=pool();
@@ -654,4 +701,173 @@ function vLearn(box){
   const lk=el("a",null,"Methodology page");lk.href="#";lk.onclick=e=>{e.preventDefault();go("methodology");};
   cta.appendChild(lk);cta.appendChild(document.createTextNode(". Nothing here is financial advice — it's a very well-organized telescope."));
   box.appendChild(cta);
+}
+
+/* ================= HOT & COLD (temperature transitions) ================= */
+function moveRow(a,pathText){
+  const btn=el("button","qmover");btn.style.width="100%";btn.onclick=()=>go("product",a.id);
+  const im=cardImg(a,"200x200");if(im)btn.appendChild(im);
+  const tx=el("span");tx.style.flex="1";tx.style.minWidth="0";
+  const l1=el("div");l1.style.cssText="font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+  l1.textContent=a.name;tx.appendChild(l1);
+  tx.appendChild(el("small",null,a.set+" · "+fm(a.price)+"  ·  "+pathText));
+  btn.appendChild(tx);
+  const v=deltaSpan(MP(a,"r30"));v.style.fontWeight="650";btn.appendChild(v);
+  return btn;}
+function vHotCold(box){
+  box.appendChild(el("div","h1","Hot & Cold"));
+  box.appendChild(el("div","sub","Temperature is the state; this page tracks the CHANGES — what's thawing, what's freezing, and what's been running hot or frozen for a month straight. Real prices, refreshed daily."));
+  const elig=ASSETS.filter(a=>a.eligible.eligible&&a.scores.tempHist);
+  const moves=elig.map(a=>({a,m:tempMove(a)}));
+  // thermometer: distribution of temperatures
+  const counts={hot:0,warming:0,stagnant:0,cooling:0,cold:0};
+  elig.forEach(a=>counts[a.scores.temp]!=null&&counts[a.scores.temp]++);
+  const tot=elig.length||1;
+  const th=el("div","card");th.appendChild(el("h3",null,"Market thermometer — all "+tot+" eligible assets"));
+  const bar=el("div");bar.style.cssText="display:flex;height:26px;border-radius:8px;overflow:hidden;margin:10px 0 6px";
+  ["hot","warming","stagnant","cooling","cold"].forEach(k=>{
+    const seg=el("div");seg.style.cssText="display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;min-width:2px";
+    seg.style.width=(counts[k]/tot*100)+"%";seg.style.background=TEMP[k].color;seg.style.color="#0d0d0d";
+    if(counts[k]/tot>0.08)seg.textContent=Math.round(counts[k]/tot*100)+"%";
+    seg.title=TEMP[k].label+": "+counts[k]+" assets";bar.appendChild(seg);});
+  th.appendChild(bar);
+  const lg=el("div","legend");
+  ["hot","warming","stagnant","cooling","cold"].forEach(k=>{const li=el("span","li");
+    const kk=el("i","key");kk.style.borderTopColor=TEMP[k].color;li.appendChild(kk);
+    li.appendChild(document.createTextNode(TEMP[k].icon+" "+TEMP[k].label+" ("+counts[k]+")"));lg.appendChild(li);});
+  th.appendChild(lg);box.appendChild(th);
+  // sections
+  const secs=[
+   ["🔥 Turned HOT this week","Crossed into HOT within the last 7 days — fresh breakout candidates",
+    moves.filter(x=>x.m.t==="hot"&&x.m.d7&&x.m.d7!=="hot").sort((x,y)=>(y.a.scores.heat||0)-(x.a.scores.heat||0))],
+   ["🌡 Thawing","From COLD or COOLING a week ago to WARMING or better now — where stories start",
+    moves.filter(x=>x.m.thawing).sort((x,y)=>MP(y.a,"r30")-MP(x.a,"r30"))],
+   ["🧊 Freezing","From HOT or WARMING a week ago to COOLING or COLD now — momentum lost",
+    moves.filter(x=>x.m.freezing).sort((x,y)=>MP(x.a,"r30")-MP(y.a,"r30"))],
+   ["🔥🔥 Sustained heat","HOT today, a week ago, and a month ago — the marathon runners",
+    moves.filter(x=>x.m.sustainedHot).sort((x,y)=>(y.a.scores.heat||0)-(x.a.scores.heat||0))],
+   ["❄❄ Deep freeze","COLD for a month straight — falling knives or future bargains",
+    moves.filter(x=>x.m.deepFreeze).sort((x,y)=>MP(x.a,"r30")-MP(y.a,"r30"))]];
+  const g=el("div","grid g2");
+  secs.forEach(([t,d,list])=>{
+    const c=el("div","card");c.appendChild(el("h3",null,t));c.appendChild(el("div","hint",d));
+    if(!list.length)c.appendChild(el("div","empty","Nothing in this state right now"));
+    list.slice(0,7).forEach(({a,m})=>{
+      const path=(m.d7?TEMP[m.d7].label:"–")+" → "+TEMP[m.t].label;
+      c.appendChild(moveRow(a,path));});
+    g.appendChild(c);});
+  box.appendChild(g);
+}
+
+/* ================= ERA DASHBOARDS ================= */
+function vEras(box){
+  box.appendChild(el("div","h1","Era dashboards"));
+  box.appendChild(el("div","sub","Every era of the Pokémon TCG as its own market — its index, temperature, and leaders. Click an era to open its dashboard."));
+  const IX={};DATA.indexes.forEach(i=>IX[i.id]=i);
+  const g=el("div","grid g3");
+  erasPresent().forEach(e=>{
+    const info=ERA_INFO[e]||[e,"",""];
+    const pool=ASSETS.filter(a=>a.subEra===e);
+    const ix=IX["idx_era_"+e.toLowerCase()];
+    const c=el("div","card");c.style.cursor="pointer";c.onclick=()=>go("era",e);
+    const hr=el("div");hr.style.cssText="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap";
+    const nm=el("span");nm.style.cssText="font-size:15px;font-weight:750";nm.textContent=info[0];hr.appendChild(nm);
+    if(ix&&ix.temp)hr.appendChild(tempChip(ix.temp,true));c.appendChild(hr);
+    c.appendChild(el("div","hint",info[1]+" · "+pool.length+" tracked assets"));
+    if(ix){c.appendChild(el("div","grow",grow100(ix.level)));
+      const d=el("div","delta "+pcls(ix.r30));d.textContent=fp(ix.r30)+" · 30d";c.appendChild(d);
+      const sp=el("div");sp.style.marginTop="6px";sp.appendChild(spark(ix.series.map((v,j)=>[j,v]),210,30,cssv("--s1")));c.appendChild(sp);}
+    else c.appendChild(el("div","note","Not enough full-history assets for an index yet"));
+    c.appendChild(el("div","note",info[2]));
+    g.appendChild(c);});
+  box.appendChild(g);
+}
+function vEraDetail(box){
+  const e=state.param;const info=ERA_INFO[e]||[e,"",""];
+  const pool=ASSETS.filter(a=>a.subEra===e);
+  if(!pool.length){go("eras");return;}
+  const bk=el("button","iconbtn","← All eras");bk.onclick=()=>go("eras");box.appendChild(bk);
+  box.appendChild(el("div","h1",info[0]+" — era dashboard"));
+  box.appendChild(el("div","sub",info[2]+" Covering "+info[1]+" · "+pool.length+" tracked assets ("+pool.filter(a=>a.type==="sealed").length+" sealed, "+pool.filter(a=>a.type==="single").length+" singles)."));
+  const IX={};DATA.indexes.forEach(i=>IX[i.id]=i);
+  const ix=IX["idx_era_"+e.toLowerCase()];
+  if(ix){
+    const hc=el("div","card heroX");
+    const hh=el("div");hh.style.cssText="display:flex;align-items:center;gap:10px;flex-wrap:wrap";
+    hh.appendChild(el("h3",null,info[0]+" Index"));if(ix.temp)hh.appendChild(tempChip(ix.temp));hc.appendChild(hh);
+    hc.appendChild(el("div","grow",grow100(ix.level)));
+    const d=el("div","delta "+pcls(ix.r30));d.textContent=fp(ix.r30)+" · 30d · "+fp(ix.window,0)+" since "+(META.windowLabel||"start")+" · "+ix.members.length+" members";
+    hc.appendChild(d);
+    const cb=el("div");hc.appendChild(cb);box.appendChild(hc);
+    setTimeout(()=>lineChart(cb,[{name:info[0],color:SER()[0],pts:ix.series.map((v,j)=>[Math.min(j*7,N_DAYS-1),v])}],{h:200,area:true,yFmt:v=>v.toFixed(0)}),0);}
+  box.appendChild(el("div","sec-title","This era's boards"));
+  const g=el("div","grid g3");
+  ["hot_singles","mom_gain","usd_gain"].forEach(id=>{
+    const base=BOARDS.find(x=>x.id===id);const b={...base};
+    const basePool=base.pool;b.pool=a=>a.subEra===e&&(basePool?basePool(a):true);
+    g.appendChild(boardCard(b));});
+  box.appendChild(g);
+  box.appendChild(el("div","sec-title","Top sets in this era"));
+  const sc2=el("div","card");
+  const groups={};pool.forEach(a=>{(groups[a.set]=groups[a.set]||[]).push(a);});
+  const rows=Object.entries(groups).map(([k,v])=>({k,n:v.length,val:v.reduce((s,x)=>s+x.price,0),
+    r90:median(v.map(a=>MP(a,"r90")).filter(x=>x!=null))})).filter(r=>r.r90!=null)
+    .sort((a,b)=>b.val-a.val).slice(0,10);
+  const mx=Math.max(...rows.map(r=>Math.abs(r.r90)))||1;
+  rows.forEach(r=>{const row=el("div","segrow");
+    row.appendChild(el("span","sl",r.k+" ("+r.n+")"));
+    const track=el("span","st");const barX=el("i",r.r90>=0?"pos":"neg");
+    barX.style.width=(Math.abs(r.r90)/mx*50)+"%";barX.style[r.r90>=0?"left":"right"]="50%";
+    track.appendChild(barX);track.appendChild(el("b"));row.appendChild(track);
+    const v=el("span","sv "+pcls(r.r90));v.textContent=fp(r.r90,0);row.appendChild(v);
+    sc2.appendChild(row);});
+  sc2.appendChild(el("div","note","Bars = median 3-month change per set, sets ordered by tracked value."));
+  box.appendChild(sc2);
+  box.appendChild(el("div","sec-title","All tracked in this era"));
+  const tc=el("div","card");assetTable(tc,pool);box.appendChild(tc);
+}
+
+/* ================= SUPPORT LINES ================= */
+function vSupport(box){
+  box.appendChild(el("div","h1","Support lines"));
+  const sup=hint("support line","support");
+  const sub=el("div","sub");
+  sub.appendChild(document.createTextNode("A "));sub.appendChild(sup);
+  sub.appendChild(document.createTextNode(" is a price floor the market has defended at least 3 times over 60+ days — detected automatically from your real price history. Sitting on a tested floor is historically a lower-risk entry; breaking one is a warning."));
+  box.appendChild(sub);
+  const withSup=ASSETS.filter(a=>a.supports&&a.supports.lines&&a.supports.lines.length&&a.eligible.eligible);
+  const onFloor=withSup.filter(a=>a.supports.state==="on").sort((x,y)=>x.supports.dist-y.supports.dist);
+  const broken=withSup.filter(a=>a.supports.state==="broken").sort((x,y)=>x.supports.dist-y.supports.dist);
+  const g=el("div","grid g2");
+  const mk=(title,d,list,tone)=>{
+    const c=el("div","card");c.appendChild(el("h3",null,title));c.appendChild(el("div","hint",d));
+    if(!list.length)c.appendChild(el("div","empty","None right now"));
+    list.slice(0,10).forEach(a=>{
+      const s0=a.supports.lines[0];
+      const btn=el("button","qmover");btn.style.width="100%";btn.onclick=()=>go("product",a.id);
+      const im=cardImg(a,"200x200");if(im)btn.appendChild(im);
+      const tx=el("span");tx.style.flex="1";tx.style.minWidth="0";
+      const l1=el("div");l1.style.cssText="font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+      l1.textContent=a.name;tx.appendChild(l1);
+      tx.appendChild(el("small",null,a.set+" · floor "+fm(s0.level)+" · tested "+s0.touches+"× ("+s0.from+" → "+s0.to+")"));
+      btn.appendChild(tx);
+      const v=el("span","bv "+tone);v.textContent=fp(a.supports.dist)+" vs floor";btn.appendChild(v);
+      c.appendChild(btn);});
+    return c;};
+  g.appendChild(mk("🛡 On the floor","Trading within 8% of a well-tested support — the accumulation-zone watchlist",onFloor,"up"));
+  g.appendChild(mk("⚠ Broken floors","Fell more than 3% below a tested support — treat as a caution list",broken,"down"));
+  box.appendChild(g);
+  const rest=withSup.filter(a=>a.supports.state==="above").sort((x,y)=>y.supports.lines[0].touches-x.supports.lines[0].touches);
+  box.appendChild(el("div","sec-title","Strongest tested floors (everything else)"));
+  const tc=el("div","card tablewrap");const t=el("table");
+  const hr=el("tr");["Asset","Price","Strongest floor","Tested","Span","Above floor","30d"].forEach(h=>{const th2=document.createElement("th");th2.textContent=h;hr.appendChild(th2);});
+  t.appendChild(hr);
+  rest.slice(0,25).forEach(a=>{const s0=a.supports.lines[0];
+    const tr=el("tr","click");tr.onclick=()=>go("product",a.id);
+    const td0=document.createElement("td");td0.appendChild(nameCell(a));tr.appendChild(td0);
+    [fm(a.price),fm(s0.level),s0.touches+"×",s0.from+" → "+s0.to,fp(a.supports.dist)].forEach(v=>tr.appendChild(el("td",null,v)));
+    const td=document.createElement("td");td.appendChild(deltaSpan(MP(a,"r30")));tr.appendChild(td);
+    t.appendChild(tr);});
+  tc.appendChild(t);box.appendChild(tc);
+  box.appendChild(el("div","note","Supports are statistical observations about past behavior, not guarantees — floors break. Detection: clustered price lows within ±3%, ≥3 separate touch episodes, ≥60-day span."));
 }

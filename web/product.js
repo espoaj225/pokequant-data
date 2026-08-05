@@ -81,7 +81,8 @@ function vProduct(box){
       if(ma50.length>1)series.push({name:"50-day avg",color:S[2],pts:ma50,dash:true,thin:true});
       if(all.length>=205){const ma200=ma(all,200).filter(p=>p[0]>=pts[0][0]);
         if(ma200.length>1)series.push({name:"200-day avg",color:S[3],pts:ma200,dash:true,thin:true});}}
-    lineChart(cb,series,{h:300,area:true,yFmt:v=>fmc(v)});},0);
+    const hlines=(a.supports&&a.supports.lines||[]).slice(0,2).map(s2=>({y:s2.level,label:"support "+fm(s2.level)+" ("+s2.touches+"× tested)"}));
+    lineChart(cb,series,{h:300,area:true,yFmt:v=>fmc(v),hlines});},0);
   // right rail
   const rail=el("div");rail.style.display="grid";rail.style.gap="14px";
   // facts
@@ -114,6 +115,17 @@ function vProduct(box){
     const b=el("b");b.textContent=v;if(v==="not yet collected")b.style.color="var(--muted)";
     kv.appendChild(b);lq.appendChild(kv);});
   rail.appendChild(lq);
+  // support lines
+  if(a.supports&&a.supports.lines&&a.supports.lines.length){
+    const sp2=el("div","card");const h3=el("h3",null,"Support lines");tipFor(h3,"support");sp2.appendChild(h3);
+    a.supports.lines.forEach((s2,i)=>{const kv=el("div","kv");
+      kv.appendChild(el("span",null,(i?"Secondary":"Strongest")+" floor"));
+      const b=el("b");b.textContent=fm(s2.level)+" · "+s2.touches+"× ("+s2.from+"→"+s2.to+")";kv.appendChild(b);sp2.appendChild(kv);});
+    const st2={on:"🛡 Sitting on its floor ("+fp(a.supports.dist)+" above) — historically a lower-risk zone.",
+      broken:"⚠ Below its tested floor ("+fp(a.supports.dist)+") — the floor failed; caution.",
+      above:"Currently "+fp(a.supports.dist)+" above its strongest floor."}[a.supports.state];
+    if(st2){const w=el("div","callout");w.style.marginTop="8px";w.textContent=st2;sp2.appendChild(w);}
+    rail.appendChild(sp2);}
   cols.appendChild(rail);box.appendChild(cols);
   // performance + scenario row
   const g2=el("div","grid g2");g2.style.marginTop="14px";

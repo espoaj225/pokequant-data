@@ -63,7 +63,10 @@ if "image_url" not in CAT.columns:  # catalogs collected before v5 lack images
     CAT["image_url"] = ""
 CAT["image_url"] = CAT["image_url"].fillna("").astype(str)
 CAT = CAT.drop_duplicates("product_id").set_index("product_id")
-print(f"catalog: {len(CAT):,} products")
+# exclude digital code cards from everything (covers history collected before the collector-side filter)
+CODE_RE = re.compile(r"code card|online code|tcg live code|ptcgo code|ptcgl", re.I)
+CODE_PIDS = set(CAT.index[CAT["name"].astype(str).str.contains(CODE_RE, na=False)])
+print(f"catalog: {len(CAT):,} products ({len(CODE_PIDS):,} code cards excluded)")
 
 # ---------------- pick primary subtype per product ----------------
 PRIORITY = ["Unlimited Holofoil", "Holofoil", "Normal", "Unlimited",
@@ -114,6 +117,8 @@ for i, pid in enumerate(PIDS):
         pos = np.where(~mask, np.arange(len(seg)), -1)
         pos = np.maximum.accumulate(pos)
         seg = seg[pos]
+    if int(pid) in CODE_PIDS:
+        continue
     SERIES[int(pid)] = {"startIdx": first, "p": seg.astype("float64"),
                         "realDays": int((~mask).sum()),
                         "coverage": float((~mask).sum()) / len(seg),
@@ -299,6 +304,67 @@ def temperature(m, s):
     if r30 <= -3 or (not above50 and s["momentum"] < 45): return "cooling"
     return "stagnant"
 
+def temp_at(p):
+    """Temperature evaluated on a truncated price series (for transition detection)."""
+    if len(p) < 35: return None
+    now = float(p[-1])
+    r30 = pct(now, float(p[-31]))
+    r7 = pct(now, float(p[-8])) if len(p) > 8 else 0
+    r90 = pct(now, float(p[-91])) if len(p) > 91 else r30
+    ma50 = float(np.mean(p[-50:])) if len(p) >= 50 else now
+    above50 = now > ma50
+    core = 0.25*np.clip(r7 or 0,-15,15)/15 + 0.45*np.clip(r30 or 0,-30,30)/30 + 0.30*np.clip(r90 or 0,-60,60)/60
+    mom = float(np.clip(50 + 55*core + (1.2 if above50 else -1.2), 0, 100))
+    if (r30 or 0) >= 8 and above50 and mom >= 62: return "hot"
+    if (r30 or 0) <= -8 and not above50 and mom <= 38: return "cold"
+    if (r30 or 0) >= 3 and mom >= 53: return "warming"
+    if (r30 or 0) <= -3 or (not above50 and mom < 45): return "cooling"
+    return "stagnant"
+
+def find_supports(p, start_idx):
+    """Detect long-tested price floors: clustered local minima with >=3 touches over >=60 days."""
+    n = len(p)
+    if n < 90: return {"lines": [], "state": "none", "dist": None}
+    piv = []
+    for i in range(5, n - 2):
+        w = p[max(0, i-5):i+6]
+        if p[i] <= w.min() * 1.001:
+            piv.append((i, float(p[i])))
+    clusters = []
+    for i, v in piv:
+        placed = False
+        for c in clusters:
+            if abs(v / c["level"] - 1) <= 0.03:
+                c["touch"].append(i)
+                c["level"] = float(np.median([p[j] for j in c["touch"]]))
+                placed = True
+                break
+        if not placed:
+            clusters.append({"level": v, "touch": [i]})
+    now = float(p[-1])
+    lines = []
+    for c in clusters:
+        t = sorted(set(c["touch"]))
+        # count touch episodes at least 10 days apart, spanning >= 60 days
+        eps, last = [], -99
+        for i in t:
+            if i - last >= 10: eps.append(i)
+            last = i
+        if len(eps) >= 3 and (t[-1] - t[0]) >= 60 and c["level"] <= now * 1.10:
+            lines.append({"level": round(c["level"], 2), "touches": len(eps),
+                          "from": DATES[start_idx + t[0]].isoformat()[:7],
+                          "to": DATES[start_idx + t[-1]].isoformat()[:7]})
+    lines.sort(key=lambda l: (-l["touches"], -l["level"]))
+    lines = lines[:2]
+    state, dist = "none", None
+    if lines:
+        lv = lines[0]["level"]
+        dist = round((now / lv - 1) * 100, 1)
+        if dist < -3: state = "broken"
+        elif dist <= 8: state = "on"
+        else: state = "above"
+    return {"lines": lines, "state": state, "dist": dist}
+
 def eligibility(price, m, s, is_sealed):
     reasons = []
     minp = 25 if is_sealed else 5
@@ -379,6 +445,9 @@ for pid in tier:
     m, now = compute(pid, s)
     sc = scores_for(m)
     sc["temp"] = temperature(m, sc)
+    p = s["p"]
+    sc["tempHist"] = {"d1": temp_at(p[:-1]), "d7": temp_at(p[:-7]) if len(p) > 41 else None,
+                      "d30": temp_at(p[:-30]) if len(p) > 64 else None}
     is_sealed = meta["sealed"]
     aid = meta["kitId"] or f"p{pid}"
     img = str(CAT.loc[pid, "image_url"]) if pid in CAT.index else ""
@@ -394,6 +463,7 @@ for pid in tier:
         "price": round(now, 2), "anchor": "real-tcgcsv",
         "metrics": m, "scores": sc, "eligible": eligibility(now, m, sc, is_sealed),
         "scenario": scenario(now, m, sc), "commentary": commentary(meta["name"], m, sc),
+        "supports": find_supports(s["p"], s["startIdx"]),
         "recentMarks": recent_marks(pid),
         "series": {"startIdx": s["startIdx"], "p": [round(float(x), rnd) for x in s["p"]]},
     })
@@ -411,6 +481,11 @@ def build_indexes():
         ("idx_q_sv", "Sealed · Vintage", "WOTC-era factory-sealed products.", lambda a: a["type"] == "sealed" and a["era"] == "vintage", "eq"),
         ("idx_q_gm", "Singles · Modern", "Modern-era single cards.", lambda a: a["type"] == "single" and a["era"] == "modern", "cap"),
         ("idx_q_gv", "Singles · Vintage", "WOTC-era single cards.", lambda a: a["type"] == "single" and a["era"] == "vintage", "eq"),
+    ] + [
+        (f"idx_era_{e.lower()}", f"{e} Era Index", f"All full-history {e}-era assets.",
+         (lambda ee: lambda a: a["subEra"] == ee)(e), "cap")
+        for e in ("WOTC", "EX", "DPPt", "BW", "XY", "SM", "SWSH", "SV", "Mega")
+    ] + [
         ("idx_vintage", "Vintage Index", "WOTC-era assets.", lambda a: a["era"] == "vintage", "eq"),
         ("idx_modern", "Modern Index", "Post-WOTC assets.", lambda a: a["era"] == "modern", "cap"),
         ("idx_bb", "Booster Box Index", "Factory-sealed booster boxes.", lambda a: a.get("kind") == "Booster Box", "eq"),

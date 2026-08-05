@@ -20,7 +20,7 @@ const state={view:"overview",param:null,
   compare:["base1-4","swsh7-215"],cmpRange:365,alerts:[
     {asset:"swsh7-215",type:"Price above",value:2500,note:"Take-profit review"},
     {asset:"sl-evs-box",type:"Price below",value:2000,note:"Add on weakness"}].filter(al=>BYID[al.asset]),
-  seg:"all",cls:"all",theme:"dark",back:null};
+  seg:"all",cls:"all",eras:new Set(),theme:"dark",back:null};
 
 function fm(v,dec){ if(v==null)return "–";
   const abs=Math.abs(v);
@@ -78,6 +78,7 @@ function lineChart(box,seriesIn,opts={}){
   const x0=Math.min(...xs),x1=Math.max(...xs);
   let lo=Infinity,hi=-Infinity;
   series.forEach(s=>s.pts.forEach(([,y])=>{if(y<lo)lo=y;if(y>hi)hi=y;}));
+  if(opts.hlines)opts.hlines.forEach(h=>{if(h.y<lo)lo=h.y;if(h.y>hi)hi=h.y;});
   const pad=(hi-lo)*0.07||hi*0.05||1;lo=Math.max(0,lo-pad);hi+=pad;
   const ticks=niceTicks(lo,hi);
   lo=Math.min(lo,ticks[0]);hi=Math.max(hi,ticks[ticks.length-1]);
@@ -107,6 +108,11 @@ function lineChart(box,seriesIn,opts={}){
       add("rect",{x:X(i)-bw/2,y:vTop+volH-h,width:bw,height:Math.max(1,h),rx:1.5,
         fill:cssv("--baseline")});});
     const tx=add("text",{x:W-PR+6,y:vTop+10,"font-size":10,fill:cssv("--muted")});tx.textContent="sales/wk";}
+  // horizontal reference lines (e.g. support floors)
+  if(opts.hlines)opts.hlines.forEach(h=>{
+    const y=Y(h.y);
+    add("line",{x1:PL,x2:PL+plotW,y1:y,y2:y,stroke:cssv("--warn")||"#fab219","stroke-width":1.5,"stroke-dasharray":"7 5",opacity:.8});
+    if(h.label){const tx=add("text",{x:PL+4,y:y-4,"font-size":10,fill:cssv("--warn")||"#fab219"});tx.textContent=h.label;}});
   // series paths
   series.forEach((s,si)=>{
     const d=s.pts.map(([x,y],j)=>(j?"L":"M")+X(x).toFixed(1)+" "+Y(y).toFixed(1)).join("");
@@ -211,14 +217,17 @@ const BOARDS=[
  {id:"vintage",t:"Strongest vintage (6m)",d:"Best 180-day real return, WOTC era",pool:a=>a.era==="vintage",key:a=>MP(a,"r180"),val:a=>fp(MP(a,"r180"))},
  {id:"modern",t:"Strongest modern (6m)",d:"Best 180-day real return, SWSH/SV/Mega eras",pool:a=>a.era==="modern",key:a=>MP(a,"r180"),val:a=>fp(MP(a,"r180"))},
 ];
-function boardItems(b,seg,cls,n=8){
+function boardItems(b,seg,cls,n=8,eras){
   let pool=ASSETS.filter(a=>b.all?true:a.eligible.eligible);
   if(b.pool)pool=pool.filter(b.pool);
   if(seg&&seg!=="all")pool=pool.filter(a=>inSeg(a,seg));
   if(cls&&cls!=="all")pool=pool.filter(a=>a.type===cls);
+  if(eras&&eras.size)pool=pool.filter(a=>eras.has(a.subEra));
   pool=pool.filter(a=>b.key(a)!=null);
   pool.sort((x,y)=>b.key(y)-b.key(x));
   return pool.slice(0,n);}
+const ERA_ORDER=["WOTC","EX","DPPt","BW","XY","SM","SWSH","SV","Mega"];
+function erasPresent(){const s=new Set(ASSETS.map(a=>a.subEra));return ERA_ORDER.filter(e=>s.has(e));}
 
 /* ---------- market breadth (computed live) ---------- */
 function breadth(){let above=0,tot=0;ASSETS.forEach(a=>{if(a.metrics.vsMa50!=null){tot++;if(a.metrics.vsMa50>0)above++;}});
@@ -355,6 +364,7 @@ const GLOSSARY={
  sparkline:["Trend","The little line = last 90 days of price, green if up overall, red if down."],
  breadth:["Market breadth","What share of everything we track is above its own 50-day trend line. High = a broad rally; low = weakness almost everywhere."],
  scenario:["Scenarios","Bull / base / bear are model-projected 6-month paths from current trend and choppiness. Estimates to frame thinking — never guarantees."],
+ support:["Support line","A price floor the market has bounced off at least 3 times over 60+ days. Sitting just above a tested floor is historically a lower-risk entry; falling through one is a warning."],
 };
 function tipFor(elm,key,extra){
   const g=GLOSSARY[key];if(!g)return elm;
@@ -400,6 +410,19 @@ const PAGE_HELP={
  watchlist:["Star anything (☆) anywhere to pin it here.","Resets on refresh in this version."],
  portfolio:["A demo collection marked to real market prices.",
   "Net proceeds assume you sell at market, minus ~13% fees — not at the highest asking price."],
+ hotcold:["Temperature = a quick verdict: 🔥 rising fast · → sideways · ❄ falling hard.",
+  "This page tracks CHANGES: what just turned hot (thawing), what's losing steam (freezing), and what's been frozen or on fire for a month straight.",
+  "Transitions are often more useful than states — a card moving from COLD to WARMING is where stories start."],
+ eras:["Every Pokémon era gets its own dashboard — its index, temperature, top sets and chase cards.",
+  "Eras behave like different markets: vintage WOTC moves on scarcity, modern SV moves on hype and reprints.",
+  "Click any era card to open its full dashboard."],
+ era:["Everything on this page is filtered to one era.",
+  "The index shows what $100 in this era's tracked assets would be worth since Jan 2025.",
+  "Boards and the table follow the same eligibility rules as everywhere else."],
+ support:["A support line is a price floor the market has bounced off 3+ times over 60+ days.",
+  "'On the floor' = trading within 8% of a tested support — historically lower-risk entries.",
+  "'Broken floors' = price fell through a tested support — a caution list, not a buy list.",
+  "Supports also appear as dashed lines on product-page charts."],
  learn:[],methodology:[]};
 function helpBar(viewKey){
   const items=PAGE_HELP[viewKey];
@@ -416,3 +439,25 @@ function helpBar(viewKey){
   panel.appendChild(more);
   btn.onclick=()=>{const on=panel.style.display==="none";panel.style.display=on?"block":"none";btn.classList.toggle("on",on);};
   wrap.appendChild(btn);wrap.appendChild(panel);return wrap;}
+
+/* ---------- v8: era info + temp transition helpers ---------- */
+const ERA_INFO={WOTC:["WOTC","1999–2003","Base Set through Neo & e-Card — the vintage foundation."],
+ EX:["EX Era","2003–2007","EX mechanics, holo patterns, Gold Star chases."],
+ DPPt:["Diamond & Pearl","2007–2011","Lv.X cards and the start of the modern aesthetic."],
+ BW:["Black & White","2011–2013","Plasma, full-art trainers, EX revival."],
+ XY:["XY Era","2014–2016","Full-art legends, BREAK cards, blue-chip sealed."],
+ SM:["Sun & Moon","2017–2019","GX cards, rainbow rares, Hidden Fates."],
+ SWSH:["Sword & Shield","2020–2023","VMAX alt arts — the pandemic boom era."],
+ SV:["Scarlet & Violet","2023–2025","SIRs, 151, Prismatic Evolutions."],
+ Mega:["Mega Era","2025–","Mega Evolution onward — the current frontier."]};
+const TEMP_RANK={cold:0,cooling:1,stagnant:2,warming:3,hot:4};
+function tempMove(a){
+  const t=a.scores.temp,h=a.scores.tempHist||{};
+  return {t,d1:h.d1,d7:h.d7,d30:h.d30,
+    newToday:h.d1&&h.d1!==t,
+    thawing:h.d7&&TEMP_RANK[t]>=3&&TEMP_RANK[h.d7]<=1,
+    freezing:h.d7&&TEMP_RANK[t]<=1&&TEMP_RANK[h.d7]>=3,
+    heating:h.d7&&TEMP_RANK[t]-TEMP_RANK[h.d7]>=1,
+    coolingOff:h.d7&&TEMP_RANK[h.d7]-TEMP_RANK[t]>=1,
+    sustainedHot:t==="hot"&&h.d7==="hot"&&h.d30==="hot",
+    deepFreeze:t==="cold"&&h.d7==="cold"&&h.d30==="cold"};}

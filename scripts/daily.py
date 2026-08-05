@@ -18,6 +18,8 @@ CATALOG = os.path.join(ROOT, "data", "catalog.csv.gz")
 SEALED_RE = re.compile(r"booster box|elite trainer|booster bundle|premium collection|collection box|"
                        r"booster pack|blister|tin\b|display|build & battle|battle deck|theme deck|"
                        r"deck box case|booster case|pokemon center", re.I)
+# digital redemption codes are not collectibles — excluded from all tracking
+CODE_RE = re.compile(r"code card|online code|tcg live code|ptcgo code|ptcgl", re.I)
 
 PRICE_FIELDS = ["date", "category", "group_id", "product_id", "subtype",
                 "market", "low", "mid", "high", "direct_low"]
@@ -56,12 +58,17 @@ def collect_today():
             except Exception as e:
                 print(f"  WARN group {gid} ({g.get('name','?')}): {e}", file=sys.stderr)
                 continue
+            code_pids = {pr["productId"] for pr in products if CODE_RE.search(pr.get("name", ""))}
             for p in prices:
+                if p["productId"] in code_pids:
+                    continue
                 price_rows.append([ds, cat_key, gid, p["productId"], p.get("subTypeName") or "Normal",
                                    p.get("marketPrice"), p.get("lowPrice"), p.get("midPrice"),
                                    p.get("highPrice"), p.get("directLowPrice")])
             for pr in products:
                 nm = pr.get("name", "")
+                if CODE_RE.search(nm):
+                    continue
                 num = product_number(pr)
                 rarity = next((ed.get("value") for ed in pr.get("extendedData") or []
                                if ed.get("name") == "Rarity"), "")
