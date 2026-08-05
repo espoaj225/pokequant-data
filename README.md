@@ -1,92 +1,63 @@
-# PokéQuant Data Repository
+# PokéQuant Data Repository + Live Terminal
 
-Your own long-term Pokémon TCG price database. Every day this repo automatically
-collects real TCGplayer prices (via the free [tcgcsv.com](https://tcgcsv.com) mirror)
-for every asset in `universe.csv`, stores them as tiny monthly CSVs, and compiles
-them into a SQLite database.
+Your own Pokémon TCG market database **and** a self-updating market terminal website.
 
-**No API keys, no server, no cost.** GitHub Actions does the collecting.
+Every day, GitHub's servers automatically:
+1. Collect real TCGplayer prices for **every Pokémon product** (English + Japanese,
+   ~50,000+ cards and sealed items) via the free [tcgcsv.com](https://tcgcsv.com) mirror
+2. Store them as one immutable compressed file per day in `data/prices/`
+3. Recompute all analytics (momentum, volatility, spreads, indexes, rankings, scenarios)
+4. Republish the terminal at **`https://YOUR_USER.github.io/REPO_NAME/`**
 
-## One-time setup (about 3 minutes)
+Share that link with anyone — they always see the latest data. No server, no cost,
+no manual input, ever.
 
-1. Create a new **private** GitHub repository (e.g. `pokequant-data`).
-2. Put the contents of this folder in it and push:
-   ```bash
-   cd pokequant-data-kit
-   git init -b main
-   git add -A
-   git commit -m "PokeQuant collector"
-   git remote add origin https://github.com/YOUR_USER/pokequant-data.git
-   git push -u origin main
-   ```
-3. On GitHub: **Settings → Actions → General → Workflow permissions →**
-   select **"Read and write permissions"** → Save.
-4. Go to the **Actions** tab → enable workflows → open **"Daily price collection"**
-   → **Run workflow** (this seeds today's data immediately; after that it runs
-   itself every day at 21:30 UTC).
+## One-time setup (~5 minutes)
 
-That's it. From now on `data/prices/` grows by one day of real prices daily.
+1. Put the contents of this folder in a **public** GitHub repository and push.
+2. **Settings → Actions → General → Workflow permissions** → "Read and write permissions" → Save.
+3. **Settings → Pages → Build and deployment → Source** → select **"GitHub Actions"**.
+4. **Actions tab → "Historical backfill (optional)" → Run workflow** (defaults: 2025-01-01 → yesterday).
+   This downloads tcgcsv's daily archives and keeps *every* Pokémon product — expect
+   30–90 minutes and roughly 0.5–1 GB of history in the repo. Re-run if it ever times
+   out; completed days are skipped.
+5. **Actions tab → "Daily price collection" → Run workflow** once. This collects today,
+   builds the site, and publishes it. From then on it runs itself daily at 21:30 UTC.
 
-## Optional: real history back to Jan 2025
-
-tcgcsv archives every past day (from 2024-02-08). To backfill:
-Actions tab → **"Historical backfill (optional)"** → Run workflow
-(defaults: 2025-01-01 → yesterday). It downloads one archive per day, keeps only
-the tracked assets, and commits monthly checkpoints — safe to re-run if it ever
-times out; already-collected days are skipped.
+Your live terminal: `https://YOUR_USER.github.io/REPO_NAME/`
+(An offline snapshot is downloadable from the terminal's sidebar.)
 
 ## What's inside
 
 | Path | What it is |
 |---|---|
-| `universe.csv` | The tracked assets. **Add a row to track anything** (see below). |
-| `data/resolved.csv` | Universe rows resolved to TCGplayer product IDs (auto-generated). |
-| `data/prices/YYYY-MM.csv` | One month of daily prices, long format — the source of truth. |
-| `data/pokequant.db` | SQLite database rebuilt after each collection (assets, prices, `v_daily` view). |
-| `scripts/daily.py` | Collects today's prices. |
-| `scripts/backfill.py` | Optional archive backfill. |
-| `scripts/build_db.py` | CSV → SQLite compiler. |
-| `scripts/validate.py` | Coverage + anomaly report (runs in every workflow). |
+| `data/prices/YYYY/MM/*.csv.gz` | One file per day: every product's market/low/mid/high per printing. Immutable. |
+| `data/catalog.csv.gz` | Product metadata for the full catalog (names, numbers, rarities, sets). Refreshed daily. |
+| `universe.csv` + `scripts/assets_meta.json` | Curated tags (character, era, nicknames, MSRP) for featured assets — cosmetic only; **collection covers everything regardless**. |
+| `scripts/daily.py` | Collects today's full catalog (~400 small requests). |
+| `scripts/backfill.py` | Archive backfill (full catalog per day). |
+| `scripts/analytics.py` | Computes metrics/scores/indexes → `docs/data.json`, search catalog, lazy series shards. |
+| `scripts/build_site.py` | Assembles the terminal site into `docs/`. |
+| `scripts/build_db.py` | Optional: compile day files into a local SQLite DB (run locally; too large to commit). |
+| `scripts/validate.py` | Coverage report, runs in every workflow. |
 
-## Adding assets
+## How the terminal handles 50,000+ products
 
-Append a row to `universe.csv`:
+Everything is **collected and stored**. For the browser:
+- Every product **≥ $5**, plus **all sealed items** (capped at the ~4,500 largest),
+  ships with full pre-computed analytics, scores, rankings and index membership.
+- **Everything else** is in the search box too — its page loads the real price series
+  on demand and computes performance in your browser from the same repo data.
+- Rankings stay eligibility-gated (price floors, ≥120 real days, coverage, confidence),
+  so penny-card noise never tops a board.
 
-- **A single card** — `match_kind=number`, `match_value` = the card number as printed
-  (e.g. `215/203`). `set_query` is any distinctive part of the set name on TCGplayer.
-- **A sealed product** — `match_kind=name`, `match_value` = a substring of the product
-  name (e.g. `Booster Box`, `Elite Trainer Box`, `Booster Bundle`).
+## Honest limits
 
-Then run the daily workflow once with "refresh" (or just wait — resolution re-runs
-automatically when `data/resolved.csv` is missing; delete it to force a full re-resolve).
-Backfill can be re-run any time to fetch history for newly added assets.
-
-## Querying the database
-
-```bash
-sqlite3 data/pokequant.db "SELECT date, market FROM v_daily WHERE asset_id='sl-evs-box' ORDER BY date DESC LIMIT 14;"
-```
-
-## Rebuilding the PokéQuant terminal on this data
-
-Once the repo has data (a day of live collection, or the backfill), bring it back
-to Claude and say:
-
-> Rebuild the PokéQuant terminal from my repo `https://github.com/YOUR_USER/pokequant-data`
-
-If the repo is private, either make it public, or attach the `data/` files to the chat.
-The terminal's modeled history is then replaced with your real collected history,
-and volume-dependent metrics are re-labeled to reflect what the free data can and
-cannot support.
-
-## Notes & limits (honest ones)
-
-- tcgcsv mirrors TCGplayer **prices** (market/low/mid/high per printing). It does
-  **not** include sales counts, listing depth, or graded-card values.
-- Graded assets (PSA/CGC) and true sales-volume data need other sources —
-  the collector has env-var slots ready (`PRICECHARTING_TOKEN`, `JUSTTCG_API_KEY`)
-  for when you want to add them.
-- Data lands once per day. Intraday moves don't exist in this feed.
-- Be a good citizen: the daily workflow makes ~60 small requests; the backfill
-  downloads one archive per day of history. Both are well within tcgcsv's intended use
-  (it exists precisely so people don't hammer TCGplayer directly).
+- tcgcsv mirrors TCGplayer **prices** only: no sales counts, listing depth, eBay solds,
+  or graded values. Metrics that need those are hidden until the sources are added
+  (the collector has env-var slots ready: `PRICECHARTING_TOKEN`, `JUSTTCG_API_KEY`).
+- Data lands once per day; there is no intraday feed.
+- GitHub may pause schedules in inactive repos (~60 days); the daily commits keep it
+  active, and re-enabling is one click if it ever happens.
+- Be a good citizen: the daily job makes a few hundred small requests; the backfill
+  downloads one archive per day of history, once. Consider supporting tcgcsv's Patreon.

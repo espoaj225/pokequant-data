@@ -1,20 +1,17 @@
-"""OPTIONAL backfill: real historical prices from tcgcsv daily archives.
+"""Backfill v4: real historical prices for EVERY Pokémon product from tcgcsv archives.
 
-tcgcsv archives every day's full TCGplayer price data (from 2024-02-08 onward) at
-  https://tcgcsv.com/archive/tcgplayer/prices-YYYY-MM-DD.ppmd.7z
+Downloads one archive per day (from 2024-02-08 onward), extracts the whole
+Pokemon + Pokemon Japan categories, writes one immutable file per day:
+  data/prices/YYYY/MM/YYYY-MM-DD.csv.gz
 
-This script downloads one archive per day, extracts ONLY the groups we track,
-appends rows to the same monthly CSV shards the daily collector uses, then
-deletes the archive. Idempotent: days already present in the shards are skipped,
-so you can stop and re-run any time.
-
-Usage:
-  python scripts/backfill.py --from 2025-01-01 --to 2025-06-30
-Requires the `7z` binary (Ubuntu: apt-get install p7zip-full).
+Idempotent: days whose file already exists are skipped. Safe to stop/re-run.
+Usage: python scripts/backfill.py --from 2025-01-01 --to 2026-08-04
+Requires `7z` (Ubuntu: apt-get install p7zip-full).
 """
-import argparse, csv, datetime, glob, json, os, shutil, subprocess, sys
+import argparse, datetime, glob, json, os, shutil, subprocess, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import load_resolved, append_rows, days_done, download, ROOT
+from common import download, find_categories, ROOT
+from daily import write_day, day_path
 
 ARCHIVE = "https://tcgcsv.com/archive/tcgplayer/prices-{d}.ppmd.7z"
 TMP = os.path.join(ROOT, "_backfill_tmp")
@@ -28,25 +25,27 @@ def daterange(a, b):
 def run(cmd):
     return subprocess.run(cmd, capture_output=True, text=True)
 
-def process_day(d, resolved, wanted_groups, wanted_products):
+def process_day(d, cat_ids):
     ds = d.isoformat()
     os.makedirs(TMP, exist_ok=True)
     arc = os.path.join(TMP, f"{ds}.7z")
     if not download(ARCHIVE.format(d=ds), arc):
-        print(f"  {ds}: archive download failed", file=sys.stderr)
         return None
     out = os.path.join(TMP, ds)
-    # extract only the price files for groups we track (include patterns)
+    # extract only the Pokemon category trees
     inc = []
-    for gid in wanted_groups:
-        inc += [f"-ir!*{os.sep}{gid}{os.sep}prices", f"-ir!*/{gid}/prices"]
-    r = run(["7z", "x", arc, f"-o{out}", "-y"] + inc[:120])
+    for cid in cat_ids.values():
+        inc += [f"-ir!*/{cid}/*", f"-ir!*{os.sep}{cid}{os.sep}*"]
+    r = run(["7z", "x", arc, f"-o{out}", "-y"] + inc)
     if r.returncode != 0 or not glob.glob(f"{out}/**/prices", recursive=True):
         run(["7z", "x", arc, f"-o{out}", "-y"])  # fallback: full extract
     rows = []
+    cid2key = {str(v): k for k, v in cat_ids.items()}
     for path in glob.glob(f"{out}/**/prices", recursive=True):
         gid = os.path.basename(os.path.dirname(path))
-        if gid not in wanted_groups:
+        cid = os.path.basename(os.path.dirname(os.path.dirname(path)))
+        cat_key = cid2key.get(cid)
+        if cat_key is None:
             continue
         try:
             with open(path, encoding="utf-8") as f:
@@ -54,17 +53,10 @@ def process_day(d, resolved, wanted_groups, wanted_products):
         except Exception:
             continue
         for p in res:
-            a = wanted_products.get(p.get("productId"))
-            if not a:
-                continue
-            rows.append({
-                "date": ds, "asset_id": a["asset_id"], "product_id": p["productId"],
-                "subtype": p.get("subTypeName") or "Normal",
-                "market": p.get("marketPrice"), "low": p.get("lowPrice"),
-                "mid": p.get("midPrice"), "high": p.get("highPrice"),
-                "direct_low": p.get("directLowPrice"),
-            })
-    append_rows(rows)
+            rows.append([ds, cat_key, gid, p.get("productId"), p.get("subTypeName") or "Normal",
+                         p.get("marketPrice"), p.get("lowPrice"), p.get("midPrice"),
+                         p.get("highPrice"), p.get("directLowPrice")])
+    write_day(ds, rows)
     shutil.rmtree(out, ignore_errors=True)
     os.remove(arc)
     return len(rows)
@@ -84,24 +76,22 @@ def main():
     ap.add_argument("--from", dest="frm", default="2025-01-01")
     ap.add_argument("--to", dest="to", default=(datetime.date.today() - datetime.timedelta(days=1)).isoformat())
     args = ap.parse_args()
-    # always re-resolve in CI so universe.csv edits and matcher fixes take effect
-    resolved = load_resolved(refresh=bool(os.environ.get("GITHUB_ACTIONS")))
-    wanted_groups = {str(r["group_id"]) for r in resolved}
-    wanted_products = {int(r["product_id"]): r for r in resolved}
-    done = days_done()
+    cat_ids = find_categories()
+    if not cat_ids:
+        sys.exit("could not resolve Pokemon categories")
+    print("categories:", cat_ids)
     a, b = datetime.date.fromisoformat(args.frm), datetime.date.fromisoformat(args.to)
     cur_month, n_days, n_fail, first_fail = None, 0, 0, None
     for d in daterange(a, b):
-        if d.isoformat() in done:
+        if os.path.exists(day_path(d.isoformat())):
             continue
         if n_fail >= 15 and n_days == 0:
-            sys.exit(f"aborting: first {n_fail} archive downloads all failed "
-                     f"(e.g. {first_fail}). The archive endpoint is rejecting us — "
-                     f"check the URL pattern and user-agent, do not hammer the server.")
+            sys.exit(f"aborting: first {n_fail} downloads all failed (e.g. {first_fail}) — "
+                     "check connectivity/user-agent, do not hammer the server.")
         if cur_month and d.strftime("%Y-%m") != cur_month:
-            git_checkpoint(f"backfill {cur_month}")
+            git_checkpoint(f"backfill {cur_month} (full catalog)")
         cur_month = d.strftime("%Y-%m")
-        n = process_day(d, resolved, wanted_groups, wanted_products)
+        n = process_day(d, cat_ids)
         if n is None:
             n_fail += 1
             first_fail = first_fail or d.isoformat()
@@ -109,9 +99,9 @@ def main():
         n_days += 1
         print(f"{d}: {n} rows")
     git_checkpoint(f"backfill final ({cur_month})")
-    print(f"done: {n_days} days collected, {n_fail} archive downloads failed")
-    if n_days == 0:
-        sys.exit("backfill produced no data — failing the job so this is visible")
+    print(f"done: {n_days} days collected, {n_fail} downloads failed")
+    if n_days == 0 and n_fail > 0:
+        sys.exit("backfill produced no new data — failing so this is visible")
 
 if __name__ == "__main__":
     main()
