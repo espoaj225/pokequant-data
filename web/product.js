@@ -72,7 +72,8 @@ function vProduct(box){
   const cm=el("div","card");cm.appendChild(el("h3",null,"Automated market commentary"));
   cm.appendChild(el("div","commentary",a.commentary));leftcol.appendChild(cm);
   cols.appendChild(leftcol);
-  setTimeout(()=>{
+  cb.appendChild(el("div","empty","Loading chart…"));
+  loadSeries(a).then(()=>{
     const pts=sliceRange(a,prodState.range);
     const all=sliceRange(a,N_DAYS);
     const series=[{name:a.name,color:S[0],pts}];
@@ -82,7 +83,7 @@ function vProduct(box){
       if(all.length>=205){const ma200=ma(all,200).filter(p=>p[0]>=pts[0][0]);
         if(ma200.length>1)series.push({name:"200-day avg",color:S[3],pts:ma200,dash:true,thin:true});}}
     const hlines=(a.supports&&a.supports.lines||[]).slice(0,2).map(s2=>({y:s2.level,label:"support "+fm(s2.level)+" ("+s2.touches+"× tested)"}));
-    lineChart(cb,series,{h:300,area:true,yFmt:v=>fmc(v),hlines});},0);
+    lineChart(cb,series,{h:300,area:true,yFmt:v=>fmc(v),hlines});});
   // right rail
   const rail=el("div");rail.style.display="grid";rail.style.gap="14px";
   // facts
@@ -115,6 +116,15 @@ function vProduct(box){
     const b=el("b");b.textContent=v;if(v==="not yet collected")b.style.color="var(--muted)";
     kv.appendChild(b);lq.appendChild(kv);});
   rail.appendChild(lq);
+  // my notes (saved in this browser)
+  const nc=el("div","card");nc.appendChild(el("h3",null,"My notes"));
+  nc.appendChild(el("div","hint","Private research notes — saved automatically in this browser."));
+  const ta=document.createElement("textarea");
+  ta.value=(state.notes&&state.notes[a.id])||"";
+  ta.placeholder="Why are you watching this? Target price, thesis, reminders…";
+  ta.style.cssText="width:100%;min-height:84px;background:var(--surface2);color:var(--ink);border:1px solid var(--border);border-radius:9px;padding:9px 11px;font:inherit;font-size:12.8px;resize:vertical";
+  let ntimer;ta.addEventListener("input",()=>{state.notes[a.id]=ta.value;clearTimeout(ntimer);ntimer=setTimeout(saveDesk,400);});
+  nc.appendChild(ta);rail.appendChild(nc);
   // support lines
   if(a.supports&&a.supports.lines&&a.supports.lines.length){
     const sp2=el("div","card");const h3=el("h3",null,"Support lines");tipFor(h3,"support");sp2.appendChild(h3);
@@ -195,10 +205,32 @@ function vProduct(box){
 /* ================= PORTFOLIO ================= */
 function vPortfolio(box){
   box.appendChild(el("div","h1","Portfolio"));
-  box.appendChild(el("div","sub","A demo collection marked to market. Estimated net proceeds use realistic exit values (current market, not highest listing) minus ~13% marketplace fees and shipping."));
-  const rows=DATA.portfolio.map(h=>{const a=BYID[h.id];
+  box.appendChild(el("div","sub","Your collection, marked to real market prices daily and saved automatically in this browser. Estimated net proceeds use realistic exit values (current market, not highest listing) minus ~13% marketplace fees and shipping."));
+  const mine=state.myPortfolio&&state.myPortfolio.length;
+  const src=mine?state.myPortfolio:DATA.portfolio;
+  if(!mine){const c0=el("div","callout");
+    c0.textContent="This is a SAMPLE portfolio. Add your first holding below and it becomes yours — saved automatically in this browser.";
+    c0.style.marginBottom="12px";box.appendChild(c0);}
+  // add-holding form
+  const form=el("div","card");form.appendChild(el("h3",null,"Add a holding"));
+  const fr=el("div","filters");
+  const sel=document.createElement("select");sel.style.maxWidth="330px";
+  ASSETS.slice().sort((x,y)=>x.name.localeCompare(y.name)).forEach(a2=>{
+    const o=document.createElement("option");o.value=a2.id;o.textContent=a2.name+" — "+a2.set+" ("+fm(a2.price)+")";sel.appendChild(o);});
+  const qty=el("input");qty.type="number";qty.min="1";qty.value="1";qty.style.width="70px";qty.title="Quantity";
+  const buy=el("input");buy.type="number";buy.step="0.01";buy.placeholder="buy price $";buy.style.width="110px";
+  const dt=el("input");dt.type="date";
+  const addb=el("button","pill on","+ Add");
+  addb.onclick=()=>{const b=parseFloat(buy.value);if(!b||b<=0){buy.focus();return;}
+    state.myPortfolio.push({id:sel.value,qty:Math.max(1,parseInt(qty.value)||1),buy:b,date:dt.value||META.generated});
+    saveDesk();render();};
+  fr.append(sel,qty,buy,dt,addb);form.appendChild(fr);
+  form.appendChild(el("div","note","Tracks assets with full analytics (every product ≥ $5 + all sealed)."));
+  box.appendChild(form);
+  const rows=src.map(h=>{const a=BYID[h.id];if(!a)return null;
     const cost=h.qty*h.buy,val=h.qty*a.price;
-    return {...h,a,cost,val,pl:val-cost,plPct:(val/cost-1)*100};});
+    return {...h,_h:h,a,cost,val,pl:val-cost,plPct:(val/cost-1)*100};}).filter(Boolean);
+  if(!rows.length){box.appendChild(el("div","empty","No holdings yet — add one above."));return;}
   const totCost=rows.reduce((s,r)=>s+r.cost,0),totVal=rows.reduce((s,r)=>s+r.val,0);
   const fees=0.13,net=totVal*(1-fees);
   const g=el("div","grid g4");
@@ -212,11 +244,12 @@ function vPortfolio(box){
   // history chart (mark-to-market of current holdings)
   box.appendChild(el("div","sec-title","Portfolio value — current holdings, marked to market"));
   const c=el("div","card");const cb=el("div");c.appendChild(cb);box.appendChild(c);
-  setTimeout(()=>{
+  cb.appendChild(el("div","empty","Loading history…"));
+  Promise.all(rows.map(r=>loadSeries(r.a))).then(()=>{
     const pts=[];for(let i=0;i<N_DAYS;i++){let v=0,ok=true;
-      rows.forEach(r=>{const p=assetSeries(r.a).at(i);if(p==null)ok=false;else v+=r.qty*p;});
+      rows.forEach(r=>{const p2=assetSeries(r.a).at(i);if(p2==null)ok=false;else v+=r.qty*p2;});
       if(ok)pts.push([i,v]);}
-    lineChart(cb,[{name:"Portfolio",color:SER()[0],pts}],{h:240,area:true,yFmt:v=>fmc(v)});},0);
+    lineChart(cb,[{name:"Portfolio",color:SER()[0],pts}],{h:240,area:true,yFmt:v=>fmc(v)});});
   // allocation
   const g2=el("div","grid g3");g2.style.marginTop="14px";
   const alloc=(title,fn)=>{const c2=el("div","card");c2.appendChild(el("h3",null,title));
@@ -235,15 +268,22 @@ function vPortfolio(box){
   // holdings table
   box.appendChild(el("div","sec-title","Holdings"));
   const tc=el("div","card tablewrap");const t=el("table");
-  const hr=el("tr");["Asset","Qty","Bought","Cost","Price","Value","P/L $","P/L %","MoM","Qual"].forEach(h=>{const th=document.createElement("th");th.textContent=h;hr.appendChild(th);});
+  const hr=el("tr");["Asset","Qty","Bought","Cost","Price","Value","P/L $","P/L %","MoM","Qual",""].forEach(h=>{const th=document.createElement("th");th.textContent=h;hr.appendChild(th);});
   t.appendChild(hr);
-  rows.sort((a,b)=>b.val-a.val).forEach(r=>{const tr=el("tr","click");tr.onclick=()=>go("product",r.a.id);
+  rows.sort((a,b)=>b.val-a.val).forEach((r,ri)=>{const tr=el("tr","click");tr.onclick=()=>go("product",r.a.id);
     const td0=document.createElement("td");td0.appendChild(nameCell(r.a));tr.appendChild(td0);
     [String(r.qty),fm(r.buy),fm(r.cost),fm(r.a.price),fm(r.val)].forEach(v=>{tr.appendChild(el("td",null,v));});
     const pl=document.createElement("td");pl.className=pcls(r.pl);pl.textContent=(r.pl>=0?"+":"−")+fm(Math.abs(r.pl));tr.appendChild(pl);
     const plp=document.createElement("td");plp.appendChild(deltaSpan(r.plPct));tr.appendChild(plp);
     const mom=document.createElement("td");mom.appendChild(deltaSpan(MP(r.a,"mom")));tr.appendChild(mom);
     tr.appendChild(el("td",null,String(Math.round(r.a.scores.quality))));
+    const tdx=document.createElement("td");
+    if(mine){const x=el("button","iconbtn","✕");x.title="Remove holding";
+      x.onclick=ev=>{ev.stopPropagation();
+        state.myPortfolio=state.myPortfolio.filter(h=>h!==r._h);
+        saveDesk();render();};
+      tdx.appendChild(x);}
+    tr.appendChild(tdx);
     t.appendChild(tr);});
   tc.appendChild(t);box.appendChild(tc);
   // liquidity exposure note

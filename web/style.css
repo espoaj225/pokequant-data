@@ -264,3 +264,19 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
 .newsrow:hover{background:var(--surface2)}
 .newsrow .cardthumb{width:44px;height:44px}
 .newstext{font-size:13.3px;color:var(--ink2);line-height:1.5;margin-top:4px}
+
+/* ---------- v11: mobile viewport containment ---------- */
+html,body{overflow-x:hidden;max-width:100vw}
+.main,.shell{min-width:0;max-width:100%}
+.card,.grid,.quad-grid,.homecards{min-width:0}
+svg{max-width:100%}
+@media (max-width:960px){
+  .topbar{flex-wrap:wrap;gap:8px}
+  .searchwrap{flex:1 1 100%;max-width:none;order:1}
+  .demo-badge{order:2;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .iconbtn{order:3;flex:none}
+  .phead .pricebig{font-size:28px}
+  .deltas{justify-content:flex-start!important}
+  .rotation{padding-bottom:6px}
+  .filters select,.filters input[type=number],.filters input[type=date]{max-width:46vw}
+}

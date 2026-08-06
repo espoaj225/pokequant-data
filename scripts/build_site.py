@@ -17,9 +17,9 @@ def read(p):
 css = read(os.path.join(WEB, "style.css"))
 app_js = "\n".join(read(os.path.join(WEB, f)) for f in ("core.js", "views.js", "product.js"))
 boot = ("function boot(){\n" + app_js +
-        '\ndocument.documentElement.dataset.theme="dark";\n'
+        '\ninitDesk();\ndocument.documentElement.dataset.theme=state.theme||"dark";\n'
         'addEventListener("hashchange",applyHash);\napplyHash();\n'
-        'window.go=go;window.render=render;window.setTheme=setTheme;\n'
+        'window.go=go;window.render=render;window.setTheme=setTheme;window.state=state;\n'
         'addEventListener("resize",(()=>{let t;return()=>{clearTimeout(t);t=setTimeout(render,250);};})());\n}\n')
 
 SHELL = """<!DOCTYPE html>
@@ -28,7 +28,8 @@ SHELL = """<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%233987e5'/%3E%3Cpath d='M2 16h28' stroke='%230d0d0d' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23fff' stroke='%230d0d0d' stroke-width='3'/%3E%3C/svg%3E">
-<title>PMT — Pokémon Market Tracker</title>
+<title>PMT — Analytics and Tracking Tool</title>
+<link rel="alternate" type="application/rss+xml" title="PMT daily market signals" href="/feed.xml">
 <style>
 __CSS__
 #loading{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:14px;color:var(--ink2)}
@@ -65,8 +66,8 @@ with open(os.path.join(DOCS, "index.html"), "w", encoding="utf-8") as f:
 # offline snapshot (data + news inlined)
 inline_loader = "window.DATA=" + data + ";\nwindow.NEWS=" + news + ";\n" + boot + "\nboot();"
 snap = SHELL.replace("__CSS__", css).replace("__LOADER__", inline_loader)
-snap = snap.replace("<title>PMT — Pokémon Market Tracker</title>",
-                    "<title>PMT — Pokémon Market Tracker (offline snapshot)</title>")
+snap = snap.replace("<title>PMT — Analytics and Tracking Tool</title>",
+                    "<title>PMT — Analytics and Tracking Tool (offline snapshot)</title>")
 with open(os.path.join(DOCS, "PMT-Snapshot.html"), "w", encoding="utf-8") as f:
     f.write(snap)
 with open(os.path.join(DOCS, ".nojekyll"), "w") as f:

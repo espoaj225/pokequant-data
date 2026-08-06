@@ -14,7 +14,7 @@ function render(){
   const sb=el("aside","sidebar");
   const brand=el("div","brand");brand.appendChild(el("div","logo"));
   const bt=el("div");const b=el("b",null,"PMT");bt.appendChild(b);
-  bt.appendChild(el("small",null,"Pokémon Market Tracker"));brand.appendChild(bt);sb.appendChild(brand);
+  bt.appendChild(el("small",null,"Analytics & Tracking Tool"));brand.appendChild(bt);sb.appendChild(brand);
   const nav=el("nav","nav");
   NAV.forEach(item=>{if(item[0]==="sec"){nav.appendChild(el("div","sec",item[1]));return;}
     const [id,ic,label]=item;const btn=el("button",state.view===id?"on":"");
@@ -81,11 +81,11 @@ function render(){
 /* ---------- shared: asset table ---------- */
 function starBtn(a){const s=el("button","star"+(state.watch.has(a.id)?" on":""),state.watch.has(a.id)?"★":"☆");
   s.title="Toggle watchlist";s.setAttribute("aria-label","Toggle watchlist");
-  s.onclick=ev=>{ev.stopPropagation();state.watch.has(a.id)?state.watch.delete(a.id):state.watch.add(a.id);render();};
+  s.onclick=ev=>{ev.stopPropagation();state.watch.has(a.id)?state.watch.delete(a.id):state.watch.add(a.id);saveDesk();render();};
   return s;}
 function nameCell(a){const c=el("div","namecell");c.appendChild(starBtn(a));
   const w=el("div");const nm=el("div","nm",a.name);
-  w.appendChild(nm);const sm=el("small",null,`${a.set} · ${a.subEra}${a.lang==="JP"?" · JP":""}${a.trophy?" · thin market":""}`);
+  w.appendChild(nm);const sm=el("small",null,`${a.set} · ${a.subEra}${a.lang==="JP"?" · JP":""}${a.trophy?" · thin market":""}${state.notes&&state.notes[a.id]?" · 📝":""}`);
   w.appendChild(sm);c.appendChild(w);return c;}
 function assetTable(box,list,opts={}){
   const wrap=el("div","tablewrap");const t=el("table");
@@ -112,7 +112,7 @@ function assetTable(box,list,opts={}){
       const r=el("tr","click");r.onclick=()=>go("product",a.id);
       cols.forEach((c,ci)=>{const td=document.createElement("td");
         if(c[0]==="Asset")td.appendChild(nameCell(a));
-        else if(c[0]==="Trend")td.appendChild(spark(sliceRange(a,90)));
+        else if(c[0]==="Trend")td.appendChild(sparkArr(a));
         else{const v=c[1](a);
           if(["7d","30d","MoM","6m","1y","YTD"].includes(c[0])){td.appendChild(deltaSpan(v));}
           else td.textContent=typeof v==="number"?v.toLocaleString():esc(v);}
@@ -475,9 +475,11 @@ function vCompare(box){
   f.appendChild(rb);box.appendChild(f);
   const c=el("div","card");const cb=el("div");c.appendChild(cb);box.appendChild(c);
   const S=SER();
-  const series=state.compare.map((id,i)=>{const a=BYID[id];
-    return {name:a.name+(a.cond==="graded"?` ${a.gradeCo} ${a.grade}`:""),color:S[i],pts:sliceRange(a,state.cmpRange)};});
-  setTimeout(()=>lineChart(cb,series,{h:300,normalized:true,yFmt:v=>v.toFixed(0)}),0);
+  cb.appendChild(el("div","empty","Loading charts…"));
+  Promise.all(state.compare.map(id=>loadSeries(BYID[id]))).then(()=>{
+    const series=state.compare.map((id,i)=>{const a=BYID[id];
+      return {name:a.name,color:S[i],pts:sliceRange(a,state.cmpRange)};});
+    lineChart(cb,series,{h:300,normalized:true,yFmt:v=>v.toFixed(0)});});
   // side-by-side metrics
   box.appendChild(el("div","sec-title","Side by side"));
   const tc=el("div","card tablewrap");const t=el("table");
@@ -500,12 +502,36 @@ function vCompare(box){
 /* ================= WATCHLIST ================= */
 function vWatchlist(box){
   box.appendChild(el("div","h1","Watchlist"));
-  box.appendChild(el("div","sub","Starred assets. In this demo the list lives in memory for the session; the production build would persist it to your account."));
+  box.appendChild(el("div","sub","Starred assets — saved automatically in this browser, so your list is here every time you come back. Use the buttons below to back it up or move it to another device."));
   const list=[...state.watch].map(id=>BYID[id]).filter(Boolean);
   const c=el("div","card");
   if(!list.length)c.appendChild(el("div","empty","Nothing starred yet — click the ☆ next to any asset."));
   else assetTable(c,list);
   box.appendChild(c);
+  // notes overview
+  const noted=Object.keys(state.notes||{}).filter(id=>BYID[id]&&state.notes[id].trim());
+  if(noted.length){
+    box.appendChild(el("div","sec-title","My research notes"));
+    const nc=el("div","card");
+    noted.forEach(id=>{const a=BYID[id];
+      const r=el("button","newsrow");r.onclick=()=>go("product",id);
+      const im=cardImg(a,"200x200");if(im)r.appendChild(im);
+      const tx=el("span");tx.style.cssText="flex:1;min-width:0";
+      const l1=el("div");l1.appendChild(el("b",null,a.name));l1.appendChild(el("small",null," · "+a.set));tx.appendChild(l1);
+      tx.appendChild(el("div","newstext",state.notes[id].slice(0,220)));
+      r.appendChild(tx);nc.appendChild(r);});
+    box.appendChild(nc);}
+  // desk management
+  const dm=el("div","card");dm.style.marginTop="14px";
+  dm.appendChild(el("h3",null,"Your desk"));
+  dm.appendChild(el("div","hint","Watchlist, alerts, portfolio, notes and settings save automatically in this browser. Back them up or move them to another device:"));
+  const row=el("div","filters");
+  const ex=el("button","pill on","⬇ Export desk backup");ex.onclick=exportDesk;row.appendChild(ex);
+  const imp=el("button","pill","⬆ Import backup");
+  const fi=document.createElement("input");fi.type="file";fi.accept=".json";fi.style.display="none";
+  fi.onchange=()=>fi.files[0]&&importDesk(fi.files[0]);
+  imp.onclick=()=>fi.click();row.appendChild(imp);row.appendChild(fi);
+  dm.appendChild(row);box.appendChild(dm);
 }
 
 /* ================= ALERTS ================= */
@@ -533,14 +559,14 @@ function vAlerts(box){
     const r=el("div");r.style.cssText="display:flex;justify-content:space-between;gap:8px;padding:8px 2px;border-top:1px solid var(--grid)";
     const l=el("span");l.appendChild(el("b",null,a.name));
     l.appendChild(el("span","note",` · ${al.type} ${fm(al.value)} — ${al.note}`));r.appendChild(l);
-    const del=el("button","iconbtn","✕");del.onclick=()=>{state.alerts.splice(i,1);render();};r.appendChild(del);
+    const del=el("button","iconbtn","✕");del.onclick=()=>{state.alerts.splice(i,1);saveDesk();render();};r.appendChild(del);
     mine.appendChild(r);});
   const form=el("div","filters");form.style.marginTop="10px";
   const sel=document.createElement("select");ASSETS.forEach(a=>{const o=document.createElement("option");o.value=a.id;o.textContent=a.name+" — "+a.set;sel.appendChild(o);});
   const typ=document.createElement("select");["Price above","Price below","Volume spike","New high","MA50 cross"].forEach(t=>{const o=document.createElement("option");o.textContent=t;typ.appendChild(o);});
   const val=el("input");val.type="number";val.placeholder="value";val.style.width="90px";
   const addb=el("button","pill on","Add alert");
-  addb.onclick=()=>{state.alerts.push({asset:sel.value,type:typ.value,value:+val.value||0,note:"custom"});render();};
+  addb.onclick=()=>{state.alerts.push({asset:sel.value,type:typ.value,value:+val.value||0,note:"custom"});saveDesk();render();};
   form.append(sel,typ,val,addb);mine.appendChild(form);
   g.appendChild(mine);box.appendChild(g);
 }
@@ -879,7 +905,7 @@ function vHome(box){
   brand.appendChild(el("div","logo"));
   const bt=el("div");
   bt.appendChild(el("div","ht","PMT"));
-  bt.appendChild(el("div","hs","Pokémon Market Tracker"));
+  bt.appendChild(el("div","hs","Analytics and Tracking Tool"));
   brand.appendChild(bt);hero.appendChild(brand);
   hero.appendChild(el("p",null,"Real TCGplayer prices for "+(META.catalogCount||0).toLocaleString()+" cards and sealed products, collected every day since "+(META.windowLabel||"Jan 2025")+" — turned into indexes, rankings, temperatures and signals."));
   const meta=el("div","hmeta");
@@ -888,6 +914,30 @@ function vHome(box){
   meta.appendChild(el("span","badge",META.days+" DAYS OF HISTORY"));
   hero.appendChild(meta);
   box.appendChild(hero);
+  const slv=sinceLastVisit();
+  if(slv){
+    const sc2=el("div","card");sc2.style.borderColor="var(--accent)";
+    sc2.appendChild(el("h3",null,"Since your last visit ("+slv.date+")"));
+    slv.alertHits.slice(0,4).forEach(({a,al})=>{
+      const r=el("button","newsrow");r.onclick=()=>go("product",a.id);
+      const t2=el("span");t2.appendChild(el("span","badge wrn","◷ ALERT"));
+      t2.appendChild(document.createTextNode(" "+a.name+" crossed your "+al.type.toLowerCase()+" "+fm(al.value)+" — now "+fm(a.price)));
+      r.appendChild(t2);sc2.appendChild(r);});
+    slv.tempChanges.slice(0,4).forEach(({a,from,to})=>{
+      const r=el("button","newsrow");r.onclick=()=>go("product",a.id);
+      const t2=el("span");t2.appendChild(tempChip(to,true));
+      t2.appendChild(document.createTextNode(" "+a.name+" went "+(TEMP[from]?TEMP[from].label:from)+" → "+(TEMP[to]?TEMP[to].label:to)));
+      r.appendChild(t2);sc2.appendChild(r);});
+    slv.bigMoves.slice(0,4).forEach(({a,chg})=>{
+      const r=el("button","newsrow");r.onclick=()=>go("product",a.id);
+      const t2=el("span");t2.appendChild(deltaSpan(chg));
+      t2.appendChild(document.createTextNode(" "+a.name+" since your last visit — now "+fm(a.price)));
+      r.appendChild(t2);sc2.appendChild(r);});
+    box.appendChild(sc2);}
+  else if(!state.deskLoaded){
+    const tip2=el("div","callout");
+    tip2.textContent="Tip: star assets (☆), set alerts, and build your portfolio — everything saves automatically in this browser, and this page will greet you with what changed since your last visit.";
+    box.appendChild(tip2);}
   const IX={};DATA.indexes.forEach(i=>IX[i.id]=i);
   const comp=IX.idx_overall;
   const CARDS=[
@@ -957,11 +1007,36 @@ function vNews(box){
     holder.textContent="";
     if(!nd||!nd.days||!nd.days.length){holder.appendChild(el("div","empty","No news available — it generates with the next daily refresh."));return;}
     const today=META.windowEnd;
+    // top story hero
+    const latest=nd.days[0];
+    if(newsFilter==="all"&&latest&&latest.items.length){
+      const top=latest.items[0];
+      const hero2=el("div","card");hero2.style.borderColor="var(--accent)";
+      hero2.appendChild(el("div","hint","TOP STORY · "+latest.date));
+      const hrow=el("button","newsrow");hrow.style.borderTop="none";hrow.onclick=()=>go("product",top.id);
+      const im=cardImg({pid:top.pid},"400x400");
+      if(im){im.className="cardthumb";im.style.cssText="width:74px;height:74px;object-fit:contain;border-radius:8px";hrow.appendChild(im);}
+      const tx=el("span");tx.style.cssText="flex:1;min-width:0";
+      const tmeta=NEWS_TYPES[top.type]||["◈",top.type];
+      const l1=el("div");l1.appendChild(el("span","badge acc",tmeta[0]+" "+tmeta[1].toUpperCase()));
+      l1.appendChild(el("small",null," "+top.set+" · "+fm(top.price)));tx.appendChild(l1);
+      const bt2=el("div","newstext");bt2.style.cssText="font-size:15px;color:var(--ink);line-height:1.5;margin-top:5px";
+      bt2.textContent=top.text;tx.appendChild(bt2);
+      hrow.appendChild(tx);hero2.appendChild(hrow);holder.appendChild(hero2);}
+    const rssRow=el("div","note");rssRow.style.margin="8px 2px 2px";
+    rssRow.appendChild(document.createTextNode("Subscribe: "));
+    const rl=el("a",null,"RSS feed");rl.href="feed.xml";rssRow.appendChild(rl);
+    rssRow.appendChild(document.createTextNode(" — one digest per day, straight to your reader or Discord."));
+    holder.appendChild(rssRow);
+    let shown=0;
+    const moreWrap=el("div");
     nd.days.forEach(day=>{
       const items=day.items.filter(it=>newsFilter==="all"||it.type===newsFilter);
       if(!items.length)return;
+      shown++;
+      const target=shown<=5?holder:moreWrap;
       const label=day.date===today?"Today · "+day.date:day.date;
-      holder.appendChild(el("div","sec-title",label));
+      target.appendChild(el("div","sec-title",label));
       const c=el("div","card");c.style.padding="6px 16px";
       items.forEach(it=>{
         const row=el("button","newsrow");row.onclick=()=>go("product",it.id);
@@ -973,7 +1048,13 @@ function vNews(box){
         l1.appendChild(el("small",null,it.set+" · "+fm(it.price)));tx.appendChild(l1);
         const body=el("div","newstext");body.textContent=it.text;tx.appendChild(body);
         row.appendChild(tx);c.appendChild(row);});
-      holder.appendChild(c);});
-    if(!holder.childNodes.length)holder.appendChild(el("div","empty","Nothing matches this filter in the last 30 days."));
+      target.appendChild(c);});
+    if(moreWrap.childNodes.length){
+      moreWrap.style.display="none";
+      const more=el("button","pill","Show "+(shown-5)+" earlier days");
+      more.style.margin="14px 0";
+      more.onclick=()=>{moreWrap.style.display="block";more.style.display="none";};
+      holder.appendChild(more);holder.appendChild(moreWrap);}
+    if(!shown)holder.appendChild(el("div","empty","Nothing matches this filter in the last 30 days."));
   });
 }

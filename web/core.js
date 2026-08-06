@@ -34,7 +34,7 @@ function deltaSpan(v,dec=1,usd){const s=el("span",pcls(v));s.textContent=fp(v,de
 function esc(t){return t==null?"":String(t);}
 
 /* ---------- theme ---------- */
-function setTheme(t){state.theme=t;document.documentElement.dataset.theme=t;render();}
+function setTheme(t){state.theme=t;document.documentElement.dataset.theme=t;if(typeof saveDesk==="function")saveDesk();render();}
 function cssv(name){return getComputedStyle(document.documentElement).getPropertyValue(name).trim();}
 const SER=()=>[cssv("--s1"),cssv("--s2"),cssv("--s3"),cssv("--s4")];
 
@@ -47,7 +47,9 @@ function showTip(x,y,build){tip.textContent="";build(tip);tip.style.display="blo
 function hideTip(){tip.style.display="none";}
 
 /* ---------- series helpers ---------- */
-function assetSeries(a){const st=a.series.startIdx,p=a.series.p;
+function startIdxOf(a){return a.series?a.series.startIdx:(a.si!=null?a.si:0);}
+function assetSeries(a){if(!a.series||!a.series.p)return {start:N_DAYS,at:()=>null,arr:[]};
+  const st=a.series.startIdx,p=a.series.p;
   return {start:st,at:i=>(i>=st&&i-st<p.length)?p[i-st]:null,arr:p};}
 function sliceRange(a,days){const s=assetSeries(a);const from=Math.max(s.start,N_DAYS-days);
   const pts=[];for(let i=from;i<N_DAYS;i++){const v=s.at(i);if(v!=null)pts.push([i,v]);}return pts;}
@@ -203,7 +205,7 @@ const BOARDS=[
  {id:"mom_lose",t:"Meaningful monthly losers",d:"Largest financially meaningful MoM declines",key:a=>{const v=meaningful(a);return v==null?null:-v;},val:a=>fp(MP(a,"mom"))},
  {id:"usd_gain",t:"Top dollar gainers (30d)",d:"Largest absolute 30-day USD gain",key:a=>M(a,"r30")?M(a,"r30").usd:null,val:a=>"+"+fm(M(a,"r30").usd)},
  {id:"ytd",t:"Year-to-date leaders",d:"Best real return since Dec 31, 2025",key:a=>MP(a,"ytd"),val:a=>fp(MP(a,"ytd"))},
- {id:"win19",t:"Full-window champions",d:"Best real return over the full collected window",pool:a=>a.series.startIdx<=7,key:a=>MP(a,"window"),val:a=>fp(MP(a,"window"),0)},
+ {id:"win19",t:"Full-window champions",d:"Best real return over the full collected window",pool:a=>startIdxOf(a)<=7,key:a=>MP(a,"window"),val:a=>fp(MP(a,"window"),0)},
  {id:"stable",t:"Most stable",d:"Top Stability Score",key:a=>a.scores.stability,val:a=>Math.round(a.scores.stability)},
  {id:"volatile",t:"Most volatile",d:"Highest 90-day realized volatility",key:a=>M(a,"vol90"),val:a=>Math.round(M(a,"vol90"))+"%"},
  {id:"quality",t:"Highest investment quality",d:"Composite of trend, stability, confidence, spread",key:a=>a.scores.quality,val:a=>Math.round(a.scores.quality)},
@@ -417,9 +419,9 @@ const PAGE_HELP={
  compare:["Pick up to four items; each is rebased to 100 at the start of the range so you compare journeys, not price tags.",
   "A $10 card and a $2,000 box can be compared fairly this way."],
  alerts:["'Triggered today' = conditions our screens detected in the latest data.",
-  "'My alert rules' are yours — in this demo they reset on refresh; accounts would make them permanent."],
- watchlist:["Star anything (☆) anywhere to pin it here.","Resets on refresh in this version."],
- portfolio:["A demo collection marked to real market prices.",
+  "'My alert rules' are yours — saved automatically in this browser, checked against fresh data on every visit."],
+ watchlist:["Star anything (☆) anywhere to pin it here.","It saves automatically in this browser; your notes and desk backup tools live here too."],
+ portfolio:["Your own collection, marked to real market prices daily and saved in this browser.",
   "Net proceeds assume you sell at market, minus ~13% fees — not at the highest asking price."],
  hotcold:["Temperature = a quick verdict: 🔥 rising fast · → sideways · ❄ falling hard.",
   "This page tracks CHANGES: what just turned hot (thawing), what's losing steam (freezing), and what's been frozen or on fire for a month straight.",
@@ -472,3 +474,67 @@ function tempMove(a){
     coolingOff:h.d7&&TEMP_RANK[h.d7]-TEMP_RANK[t]>=1,
     sustainedHot:t==="hot"&&h.d7==="hot"&&h.d30==="hot",
     deepFreeze:t==="cold"&&h.d7==="cold"&&h.d30==="cold"};}
+
+/* ================= v11: personal desk persistence (browser-local, automatic) ================= */
+const PSTORE_KEY="pmt.desk.v1";
+function loadDesk(){
+  try{const raw=localStorage.getItem(PSTORE_KEY);return raw?JSON.parse(raw):null;}
+  catch(e){return null;}}
+function saveDesk(){
+  try{localStorage.setItem(PSTORE_KEY,JSON.stringify({
+    watch:[...state.watch],alerts:state.alerts,portfolio:state.myPortfolio,
+    notes:state.notes,theme:state.theme,prefs:state.prefs,
+    lastVisit:state.lastVisitPending||state.lastVisitSaved||null}));}
+  catch(e){/* private mode etc — degrade silently */}}
+function initDesk(){
+  const d=loadDesk();
+  state.myPortfolio=[];state.notes={};state.prefs={};state.lastVisitSaved=null;state.deskLoaded=!!d;
+  if(d){
+    if(Array.isArray(d.watch))state.watch=new Set(d.watch.filter(id=>BYID[id]));
+    if(Array.isArray(d.alerts))state.alerts=d.alerts.filter(al=>BYID[al.asset]);
+    if(Array.isArray(d.portfolio))state.myPortfolio=d.portfolio.filter(h=>BYID[h.id]);
+    if(d.notes)state.notes=d.notes;
+    if(d.prefs)state.prefs=d.prefs;
+    if(d.theme)state.theme=d.theme;
+    state.lastVisitSaved=d.lastVisit||null;}
+  // snapshot today's state of watched/held assets for next visit's diff
+  const ids=new Set([...state.watch,...state.myPortfolio.map(h=>h.id)]);
+  const snap={date:META.generated,temps:{},prices:{}};
+  ids.forEach(id=>{const a=BYID[id];if(a){snap.temps[id]=a.scores.temp;snap.prices[id]=a.price;}});
+  state.lastVisitPending=snap;
+  saveDesk();}
+function sinceLastVisit(){
+  const lv=state.lastVisitSaved;
+  if(!lv||lv.date===META.generated)return null;
+  const out={date:lv.date,tempChanges:[],alertHits:[],bigMoves:[]};
+  Object.keys(lv.temps||{}).forEach(id=>{const a=BYID[id];if(!a)return;
+    if(a.scores.temp!==lv.temps[id])out.tempChanges.push({a,from:lv.temps[id],to:a.scores.temp});});
+  Object.keys(lv.prices||{}).forEach(id=>{const a=BYID[id];if(!a)return;
+    const chg=(a.price/lv.prices[id]-1)*100;
+    if(Math.abs(chg)>=5)out.bigMoves.push({a,chg});});
+  state.alerts.forEach(al=>{const a=BYID[al.asset];if(!a)return;
+    if(al.type==="Price above"&&a.price>=al.value&&(lv.prices[al.asset]==null||lv.prices[al.asset]<al.value))out.alertHits.push({a,al});
+    if(al.type==="Price below"&&a.price<=al.value&&(lv.prices[al.asset]==null||lv.prices[al.asset]>al.value))out.alertHits.push({a,al});});
+  return (out.tempChanges.length||out.alertHits.length||out.bigMoves.length)?out:null;}
+function exportDesk(){
+  const blob=new Blob([localStorage.getItem(PSTORE_KEY)||"{}"],{type:"application/json"});
+  const u=URL.createObjectURL(blob);const a=document.createElement("a");
+  a.href=u;a.download="pmt-desk-backup.json";a.click();URL.revokeObjectURL(u);}
+function importDesk(file){
+  const r=new FileReader();
+  r.onload=()=>{try{localStorage.setItem(PSTORE_KEY,r.result);initDesk();render();}
+    catch(e){alert("Could not import that file.");}};
+  r.readAsText(file);}
+
+/* ================= v11: lazy series loading (fast first paint) ================= */
+function loadSeries(a){
+  if(a.series&&a.series.p)return Promise.resolve(a);
+  if(!a.gk||!location.protocol.startsWith("http"))return Promise.resolve(a);
+  return loadShard(a.gk.split("-")[0],a.gk.split("-").slice(1).join("-")).then(shard=>{
+    const e=shard&&shard[String(a.pid)];
+    if(e)a.series={startIdx:e.s,p:e.p};
+    return a;}).catch(()=>a);}
+function sparkArr(a,w,h){
+  if(a.spark90&&a.spark90.length>1)return spark(a.spark90.map((v,i)=>[i,v]),w,h);
+  if(a.series&&a.series.p)return spark(sliceRange(a,90),w,h);
+  return el("span","note","–");}

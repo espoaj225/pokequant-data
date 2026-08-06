@@ -452,8 +452,9 @@ for pid in tier:
     aid = meta["kitId"] or f"p{pid}"
     img = str(CAT.loc[pid, "image_url"]) if pid in CAT.index else ""
     rnd = 3 if now < 2 else 2
+    catkey, gid = GROUP_OF.get(pid, ("pokemon", 0))
     assets.append({
-        "img": img or None,
+        "img": img or None, "gk": f"{catkey}-{gid}",
         "id": aid, "pid": pid, "name": meta["name"], "type": "sealed" if is_sealed else "single",
         "set": meta["set"], "num": meta["num"], "rarity": meta["rarity"], "kind": meta["kind"],
         "character": meta["character"], "era": meta["era"], "subEra": meta["subEra"], "lang": meta["lang"],
@@ -654,7 +655,7 @@ have = {a["id"] for a in assets}
 PORTFOLIO = [{"id": k, "qty": q, "buy": b, "date": d} for k, q, b, d in PORT_KIT if k in have]
 
 data = {
-    "meta": {"real": True, "name": "PMT", "fullName": "Pokémon Market Tracker",
+    "meta": {"real": True, "name": "PMT", "fullName": "Analytics and Tracking Tool",
              "domain": "pmt.today",
              "builtAt": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
              "generated": END.isoformat(), "windowStart": START.isoformat(),
@@ -670,9 +671,23 @@ data = {
     "quadrants": QUADRANTS,
     "portfolio": PORTFOLIO, "methodology": METHODOLOGY, "marketContext": ctx(),
 }
+def strip_asset(a):
+    """Core payload: metrics + a 12-point sparkline, series loaded lazily from shards."""
+    b = {k: v for k, v in a.items() if k != "series"}
+    b["si"] = a["series"]["startIdx"]
+    p = a["series"]["p"]
+    s90 = p[-90:] if len(p) >= 12 else p
+    idxs = np.linspace(0, len(s90) - 1, min(12, len(s90))).astype(int)
+    rnd = 3 if p[-1] < 2 else 2
+    b["spark90"] = [round(float(s90[i]), rnd) for i in idxs]
+    return b
+
 os.makedirs(DOCS, exist_ok=True)
+core = dict(data); core["assets"] = [strip_asset(a) for a in assets]
 with open(os.path.join(DOCS, "data.json"), "w", encoding="utf-8") as f:
-    json.dump(data, f, separators=(",", ":"))
+    json.dump(core, f, separators=(",", ":"))
+with open(os.path.join(DOCS, "data-full.json"), "w", encoding="utf-8") as f:
+    json.dump(data, f, separators=(",", ":"))  # snapshot-only: full series inline
 
 # ---------------- NEWS: auto-written market journal (last 30 days, recomputed nightly) ----------------
 def temp_class_vec(p):
@@ -719,10 +734,16 @@ def build_news(lookback=30):
             ev = None
             d1 = (p[i] / p[i-1] - 1) * 100 if p[i-1] else 0
             if t[i] == 4 and t[i-1] != 4:
-                ev = ("hot", 4, f"{a['name']} just turned HOT — up {max(0,(p[i]/p[i-31]-1)*100):.0f}% over the past month and above its trend lines. "
+                r30v = (p[i] / p[i-31] - 1) * 100
+                why = (f"up {r30v:.0f}% over the past month and above its trend lines" if r30v >= 8
+                       else f"up {max(r30v,0):.0f}% this month with week, month and quarter all pointing up")
+                ev = ("hot", 4, f"{a['name']} just turned HOT — {why}. "
                       f"Confirmed multi-week strength like this has often extended, though hot streaks can reverse without warning.")
             elif t[i] == 0 and t[i-1] != 0:
-                ev = ("cold", 4, f"{a['name']} entered DEEP COLD territory — down {abs(min(0,(p[i]/p[i-31]-1)*100)):.0f}% on the month and below trend. "
+                r30v = (p[i] / p[i-31] - 1) * 100
+                why = (f"down {abs(r30v):.0f}% on the month and below trend" if r30v <= -8
+                       else f"sliding {abs(min(r30v,0)):.0f}% with momentum fading well below trend")
+                ev = ("cold", 4, f"{a['name']} entered DEEP COLD territory — {why}. "
                       f"Falling knives are cheap for a reason; watch for a floor to form before calling it a bargain.")
             elif lv and p[i-1] / lv - 1 > 0.02 >= p[i] / lv - 1 >= -0.03:
                 lvs = f"${lv:,.2f}" if lv < 100 else f"${lv:,.0f}"
@@ -761,6 +782,25 @@ with open(os.path.join(DOCS, "news.json"), "w", encoding="utf-8") as f:
     json.dump(NEWS, f, separators=(",", ":"))
 print(f"news.json: {sum(len(d['items']) for d in NEWS['days'])} events over {len(NEWS['days'])} days")
 
+# RSS feed: one item per day (digest), so the group can subscribe — zero upkeep
+def esc_xml(s):
+    return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+rss_items = []
+for day in NEWS["days"][:14]:
+    heads = "".join(f"<li>{esc_xml(it['text'])}</li>" for it in day["items"][:8])
+    rss_items.append(
+        f"<item><title>PMT Daily — {day['date']}: {len(day['items'])} market signals</title>"
+        f"<link>https://pmt.today/#/news</link>"
+        f"<guid isPermaLink='false'>pmt-{day['date']}</guid>"
+        f"<pubDate>{datetime.strptime(day['date'],'%Y-%m-%d').strftime('%a, %d %b %Y')} 22:00:00 GMT</pubDate>"
+        f"<description>&lt;ul&gt;{esc_xml(heads)}&lt;/ul&gt;</description></item>")
+with open(os.path.join(DOCS, "feed.xml"), "w", encoding="utf-8") as f:
+    f.write('<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel>'
+            "<title>PMT — Pokémon market signals</title><link>https://pmt.today</link>"
+            "<description>Daily auto-written Pokémon TCG market journal from real TCGplayer data.</description>"
+            + "".join(rss_items) + "</channel></rss>")
+print("feed.xml written")
+
 # ---------------- search catalog for ALL products ----------------
 tier_pids = {a["pid"] for a in assets}
 cat_out = []
@@ -783,8 +823,7 @@ os.makedirs(shard_dir, exist_ok=True)
 for old in glob.glob(os.path.join(shard_dir, "*.json")):
     os.remove(old)
 shards = {}
-for pid, s in SERIES.items():
-    if pid in tier_pids: continue
+for pid, s in SERIES.items():  # ALL products — tier assets load their charts from here too
     catkey, gid = GROUP_OF.get(pid, ("pokemon", 0))
     key = f"{catkey}-{gid}"
     rnd = 3 if float(s["p"][-1]) < 2 else 2
