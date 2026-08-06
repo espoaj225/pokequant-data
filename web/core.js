@@ -233,9 +233,20 @@ function erasPresent(){const s=new Set(ASSETS.map(a=>a.subEra));return ERA_ORDER
 function breadth(){let above=0,tot=0;ASSETS.forEach(a=>{if(a.metrics.vsMa50!=null){tot++;if(a.metrics.vsMa50>0)above++;}});
   return Math.round(above/tot*100);}
 
-/* ---------- navigation ---------- */
-function go(view,param){if(view==="product")state.back={view:state.view,param:state.param};
-  state.view=view;state.param=param??null;render();scrollTo({top:0});}
+/* ---------- navigation: hash routing (deep links + working back button) ---------- */
+function hashFor(view,param){return "#/"+view+(param!=null?"/"+encodeURIComponent(param):"");}
+function go(view,param){
+  const h=hashFor(view,param);
+  if(location.hash===h){render();scrollTo({top:0});return;}
+  location.hash=h;} // hashchange listener applies state + renders
+function applyHash(){
+  const m=(location.hash||"").match(/^#\/([A-Za-z]+)(?:\/(.+))?$/);
+  if(m){state.view=m[1];state.param=m[2]!=null?decodeURIComponent(m[2]):null;}
+  else{state.view="home";state.param=null;}
+  hideTip();render();scrollTo({top:0});}
+function goBack(fallback){
+  if(history.length>1&&location.hash)history.back();
+  else go(fallback||"home");}
 
 /* ---------- full-catalog search + lazy product data (live site only) ---------- */
 let CATALOG=null,CATALOG_P=null;

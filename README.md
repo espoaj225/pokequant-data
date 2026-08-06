@@ -1,4 +1,4 @@
-# PokéQuant Data Repository + Live Terminal
+# PMT — Pokémon Market Tracker (pmt.today)
 
 Your own Pokémon TCG market database **and** a self-updating market terminal website.
 

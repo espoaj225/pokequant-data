@@ -17,7 +17,8 @@ def read(p):
 css = read(os.path.join(WEB, "style.css"))
 app_js = "\n".join(read(os.path.join(WEB, f)) for f in ("core.js", "views.js", "product.js"))
 boot = ("function boot(){\n" + app_js +
-        '\ndocument.documentElement.dataset.theme="dark";\nrender();\n'
+        '\ndocument.documentElement.dataset.theme="dark";\n'
+        'addEventListener("hashchange",applyHash);\napplyHash();\n'
         'window.go=go;window.render=render;window.setTheme=setTheme;\n'
         'addEventListener("resize",(()=>{let t;return()=>{clearTimeout(t);t=setTimeout(render,250);};})());\n}\n')
 
@@ -27,7 +28,7 @@ SHELL = """<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%233987e5'/%3E%3Cpath d='M2 16h28' stroke='%230d0d0d' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23fff' stroke='%230d0d0d' stroke-width='3'/%3E%3C/svg%3E">
-<title>PokéQuant — Pokémon Market Terminal</title>
+<title>PMT — Pokémon Market Tracker</title>
 <style>
 __CSS__
 #loading{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:14px;color:var(--ink2)}
@@ -53,20 +54,24 @@ fetch("data.json?v="+Date.now()).then(r=>{if(!r.ok)throw new Error("HTTP "+r.sta
 """
 
 data = read(os.path.join(DOCS, "data.json"))
+news_path = os.path.join(DOCS, "news.json")
+news = read(news_path) if os.path.exists(news_path) else "null"
 
 os.makedirs(DOCS, exist_ok=True)
-# fetch version (always current when served from the repo's Pages site)
+# fetch version (always current when served from pmt.today)
 out = SHELL.replace("__CSS__", css).replace("__LOADER__", FETCH_LOADER + "\n" + boot)
 with open(os.path.join(DOCS, "index.html"), "w", encoding="utf-8") as f:
     f.write(out)
-# offline snapshot (data inlined)
-inline_loader = "window.DATA=" + data + ";\n" + boot + "\nboot();"
+# offline snapshot (data + news inlined)
+inline_loader = "window.DATA=" + data + ";\nwindow.NEWS=" + news + ";\n" + boot + "\nboot();"
 snap = SHELL.replace("__CSS__", css).replace("__LOADER__", inline_loader)
-snap = snap.replace("<title>PokéQuant — Pokémon Market Terminal</title>",
-                    "<title>PokéQuant — Pokémon Market Terminal (offline snapshot)</title>")
-with open(os.path.join(DOCS, "PokeQuant-Terminal-LIVE.html"), "w", encoding="utf-8") as f:
+snap = snap.replace("<title>PMT — Pokémon Market Tracker</title>",
+                    "<title>PMT — Pokémon Market Tracker (offline snapshot)</title>")
+with open(os.path.join(DOCS, "PMT-Snapshot.html"), "w", encoding="utf-8") as f:
     f.write(snap)
 with open(os.path.join(DOCS, ".nojekyll"), "w") as f:
     f.write("")
+with open(os.path.join(DOCS, "CNAME"), "w") as f:
+    f.write("pmt.today\n")
 print(f"docs/index.html ({os.path.getsize(os.path.join(DOCS,'index.html'))/1e3:.0f} KB) + "
-      f"docs/PokeQuant-Terminal-LIVE.html ({os.path.getsize(os.path.join(DOCS,'PokeQuant-Terminal-LIVE.html'))/1e6:.2f} MB)")
+      f"docs/PMT-Snapshot.html ({os.path.getsize(os.path.join(DOCS,'PMT-Snapshot.html'))/1e6:.2f} MB) + CNAME pmt.today")

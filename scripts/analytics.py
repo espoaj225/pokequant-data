@@ -15,7 +15,7 @@ to the browser.
 import csv, glob, gzip, json, math, os, re, sys
 import numpy as np
 import pandas as pd
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime, timezone
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOCS = os.path.join(ROOT, "docs")
@@ -474,7 +474,7 @@ def build_indexes():
             and a["metrics"]["coverage"] >= 85]
     ee = ("Umbreon","Sylveon","Glaceon","Leafeon","Espeon","Vaporeon","Jolteon","Flareon","Eevee")
     DEFS = [
-        ("idx_overall", "PokéQuant Composite", "All full-history eligible assets, price-weighted, 10% cap.", lambda a: True, "cap"),
+        ("idx_overall", "PMT Composite", "All full-history eligible assets, price-weighted, 10% cap.", lambda a: True, "cap"),
         ("idx_sealed", "Sealed Product Index", "Full-history sealed products.", lambda a: a["type"] == "sealed", "cap"),
         ("idx_singles", "Singles Index", "Full-history single cards ≥ $5.", lambda a: a["type"] == "single", "cap"),
         ("idx_q_sm", "Sealed · Modern", "Modern-era factory-sealed products.", lambda a: a["type"] == "sealed" and a["era"] == "modern", "cap"),
@@ -654,7 +654,10 @@ have = {a["id"] for a in assets}
 PORTFOLIO = [{"id": k, "qty": q, "buy": b, "date": d} for k, q, b, d in PORT_KIT if k in have]
 
 data = {
-    "meta": {"real": True, "generated": END.isoformat(), "windowStart": START.isoformat(),
+    "meta": {"real": True, "name": "PMT", "fullName": "Pokémon Market Tracker",
+             "domain": "pmt.today",
+             "builtAt": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+             "generated": END.isoformat(), "windowStart": START.isoformat(),
              "windowEnd": END.isoformat(), "days": N, "windowLabel": WINDOW_LABEL,
              "tierCount": len(assets), "catalogCount": len(SERIES),
              "repo": "github.com/espoaj225/pokequant-data",
@@ -670,6 +673,93 @@ data = {
 os.makedirs(DOCS, exist_ok=True)
 with open(os.path.join(DOCS, "data.json"), "w", encoding="utf-8") as f:
     json.dump(data, f, separators=(",", ":"))
+
+# ---------------- NEWS: auto-written market journal (last 30 days, recomputed nightly) ----------------
+def temp_class_vec(p):
+    """Vectorized temperature per day for a full series."""
+    L = len(p)
+    def lag_ret(k):
+        r = np.full(L, np.nan)
+        r[k:] = (p[k:] / p[:-k] - 1) * 100
+        return r
+    r7, r30, r90 = lag_ret(7), lag_ret(30), lag_ret(90)
+    r90 = np.where(np.isnan(r90), r30, r90)
+    cs = np.concatenate([[0.0], np.cumsum(p)])
+    ma50 = np.full(L, np.nan)
+    ma50[49:] = (cs[50:] - cs[:-50]) / 50
+    above = p > np.where(np.isnan(ma50), p - 1e-9, ma50)
+    core = (0.25*np.clip(np.nan_to_num(r7),-15,15)/15 + 0.45*np.clip(np.nan_to_num(r30),-30,30)/30
+            + 0.30*np.clip(np.nan_to_num(r90),-60,60)/60)
+    mom = np.clip(50 + 55*core + np.where(above, 1.2, -1.2), 0, 100)
+    t = np.full(L, 2, dtype=int)  # stagnant
+    t[(np.nan_to_num(r30) >= 3) & (mom >= 53)] = 3
+    t[(np.nan_to_num(r30) <= -3) | (~above & (mom < 45))] = 1
+    t[(np.nan_to_num(r30) >= 8) & above & (mom >= 62)] = 4
+    t[(np.nan_to_num(r30) <= -8) & ~above & (mom <= 38)] = 0
+    t[:35] = 2
+    return t, ma50
+
+TNAMES = {0: "COLD", 1: "COOLING", 2: "STAGNANT", 3: "WARMING", 4: "HOT"}
+
+def build_news(lookback=30):
+    days = {}
+    for a in assets:
+        if a["trophy"] or not a["eligible"]["eligible"]:
+            continue
+        s = SERIES[a["pid"]]
+        p = s["p"]; L = len(p)
+        if L < 100: continue
+        t, ma50v = temp_class_vec(p)
+        cmax = np.maximum.accumulate(p)
+        sup = (a.get("supports") or {}).get("lines") or []
+        lv = sup[0]["level"] if sup else None
+        for i in range(max(36, L - lookback), L):
+            di = s["startIdx"] + i
+            ds = DATES[di].isoformat()
+            ev = None
+            d1 = (p[i] / p[i-1] - 1) * 100 if p[i-1] else 0
+            if t[i] == 4 and t[i-1] != 4:
+                ev = ("hot", 4, f"{a['name']} just turned HOT — up {max(0,(p[i]/p[i-31]-1)*100):.0f}% over the past month and above its trend lines. "
+                      f"Confirmed multi-week strength like this has often extended, though hot streaks can reverse without warning.")
+            elif t[i] == 0 and t[i-1] != 0:
+                ev = ("cold", 4, f"{a['name']} entered DEEP COLD territory — down {abs(min(0,(p[i]/p[i-31]-1)*100)):.0f}% on the month and below trend. "
+                      f"Falling knives are cheap for a reason; watch for a floor to form before calling it a bargain.")
+            elif lv and p[i-1] / lv - 1 > 0.02 >= p[i] / lv - 1 >= -0.03:
+                lvs = f"${lv:,.2f}" if lv < 100 else f"${lv:,.0f}"
+                ev = ("floor", 4, f"{a['name']} has pulled back to its tested floor near {lvs} — "
+                      f"a level buyers defended {sup[0]['touches']}× since {sup[0]['from']}. Floors that hold have historically preceded rebounds; a potential mover to watch.")
+            elif lv and p[i-1] / lv - 1 >= -0.03 > p[i] / lv - 1:
+                ev = ("break", 5, f"{a['name']} broke below its {sup[0]['touches']}×-tested floor at ${lv:,.0f}. "
+                      f"When long-held floors fail, the next support is often far lower — caution warranted.")
+            elif i >= 90 and p[i] > cmax[i-1] * 1.001:
+                ev = ("high", 3, f"{a['name']} set a new all-time tracked high at ${p[i]:,.2f}. "
+                      f"New highs cut both ways: momentum begets momentum, but nothing above means no reference point.")
+            elif not np.isnan(ma50v[i]) and p[i] > ma50v[i] >= p[i-1] and abs(d1) > 0.5:
+                ev = ("cross", 2, f"{a['name']} reclaimed its 50-day trend line — an early tell that a downtrend may be turning.")
+            elif abs(d1) >= 6 and p[i] >= 20:
+                word = "jumped" if d1 > 0 else "dropped"
+                ev = ("move", 2 + abs(d1) / 10, f"{a['name']} {word} {abs(d1):.1f}% in a single day to ${p[i]:,.2f}. "
+                      f"One-day spikes on price data alone deserve a second look before acting.")
+            if ev:
+                typ, w, txt = ev
+                days.setdefault(ds, []).append({
+                    "pid": a["pid"], "id": a["id"], "name": a["name"], "set": a["set"],
+                    "price": round(float(p[i]), 2), "type": typ, "text": txt,
+                    "w": float(w * math.log10(max(p[i], 2)))})
+    out = []
+    for ds in sorted(days, reverse=True):
+        items = sorted(days[ds], key=lambda x: -x["w"])
+        seen_a = set(); dedup = []
+        for it in items:
+            if it["id"] in seen_a: continue
+            seen_a.add(it["id"]); it.pop("w", None); dedup.append(it)
+        out.append({"date": ds, "items": dedup[:12]})
+    return out
+
+NEWS = {"generated": END.isoformat(), "days": build_news()}
+with open(os.path.join(DOCS, "news.json"), "w", encoding="utf-8") as f:
+    json.dump(NEWS, f, separators=(",", ":"))
+print(f"news.json: {sum(len(d['items']) for d in NEWS['days'])} events over {len(NEWS['days'])} days")
 
 # ---------------- search catalog for ALL products ----------------
 tier_pids = {a["pid"] for a in assets}

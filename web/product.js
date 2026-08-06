@@ -9,7 +9,7 @@ function vProduct(box){
     go("overview");return;}
   const m=a.metrics,s=a.scores,S=SER();
   const bk=el("button","iconbtn","← Back");
-  bk.onclick=()=>{const b=state.back;b?go(b.view,b.param):go("overview");};
+  bk.onclick=()=>goBack("overview");
   box.appendChild(bk);
   box.appendChild(el("div","crumb",(a.type==="sealed"?"Sealed":"Singles")+" · "+a.set+(a.num?" · #"+a.num:"")));
   // header
@@ -258,7 +258,7 @@ function vPortfolio(box){
 /* ================= lazy product page (full-catalog long tail) ================= */
 function vProductLazy(box,pid){
   const bk=el("button","iconbtn","← Back");
-  bk.onclick=()=>{const b=state.back;b?go(b.view,b.param):go("overview");};
+  bk.onclick=()=>goBack("overview");
   box.appendChild(bk);
   const holder=el("div");box.appendChild(holder);
   holder.appendChild(el("div","empty","Loading price history…"));

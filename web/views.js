@@ -1,6 +1,6 @@
 /* ================= PokeQuant views ================= */
 "use strict";
-const NAV=[["sec","Markets"],["overview","◈","Market overview"],["hotcold","♨","Hot & Cold"],["map","▩","Market map"],["eras","▣","Era dashboards"],
+const NAV=[["sec","Markets"],["home","⌂","Home"],["overview","◈","Market overview"],["news","◉","Market news"],["hotcold","♨","Hot & Cold"],["map","▩","Market map"],["eras","▣","Era dashboards"],
   ["singles","▤","Singles desk"],["sealed","▦","Sealed desk"],
   ["rankings","≡","Rankings"],["indexes","∿","Indexes"],
   ["sec","Research"],["screener","⌕","Screener"],["support","▁","Support lines"],["compare","⇄","Compare"],["alerts","◷","Alert center"],
@@ -13,8 +13,8 @@ function render(){
   // sidebar
   const sb=el("aside","sidebar");
   const brand=el("div","brand");brand.appendChild(el("div","logo"));
-  const bt=el("div");const b=el("b",null,"PokéQuant");bt.appendChild(b);
-  bt.appendChild(el("small",null,"market terminal"));brand.appendChild(bt);sb.appendChild(brand);
+  const bt=el("div");const b=el("b",null,"PMT");bt.appendChild(b);
+  bt.appendChild(el("small",null,"Pokémon Market Tracker"));brand.appendChild(bt);sb.appendChild(brand);
   const nav=el("nav","nav");
   NAV.forEach(item=>{if(item[0]==="sec"){nav.appendChild(el("div","sec",item[1]));return;}
     const [id,ic,label]=item;const btn=el("button",state.view===id?"on":"");
@@ -22,7 +22,7 @@ function render(){
     btn.onclick=()=>go(id);nav.appendChild(btn);});
   sb.appendChild(nav);
   if(location.protocol.startsWith("http")){
-    const dl=el("a",null,"⬇ Offline snapshot");dl.href="PokeQuant-Terminal-LIVE.html";
+    const dl=el("a",null,"⬇ Offline snapshot");dl.href="PMT-Snapshot.html";
     dl.setAttribute("download","");dl.style.cssText="display:block;margin:14px 10px 4px;font-size:12px;color:var(--muted)";
     dl.title="Self-contained copy of this terminal with today's data baked in — works without internet";
     sb.appendChild(dl);}
@@ -61,18 +61,18 @@ function render(){
   inp.addEventListener("blur",()=>setTimeout(()=>res.style.display="none",180));
   sw.appendChild(inp);sw.appendChild(res);tb.appendChild(sw);
   const badge=el("span","demo-badge");
-  badge.innerHTML="<b style='color:var(--good)'>LIVE DATA</b> · "+META.days+" days real TCGplayer history · your repo, updated daily";
+  badge.innerHTML="<b style='color:var(--good)'>LIVE</b> · updated "+(META.builtAt||META.generated)+" · "+META.days+" days of real history";
   badge.title=META.disclaimer;tb.appendChild(badge);
   const th=el("button","iconbtn",state.theme==="dark"?"☀ Light":"☾ Dark");
   th.onclick=()=>setTheme(state.theme==="dark"?"light":"dark");tb.appendChild(th);
   main.appendChild(tb);
   const body=el("div");main.appendChild(body);
   shell.appendChild(main);root.appendChild(shell);
-  const V={overview:vOverview,map:vMarketMap,hotcold:vHotCold,eras:vEras,era:vEraDetail,support:vSupport,
+  const V={home:vHome,news:vNews,overview:vOverview,map:vMarketMap,hotcold:vHotCold,eras:vEras,era:vEraDetail,support:vSupport,
     singles:b=>vDesk(b,"single"),sealed:b=>vDesk(b,"sealed"),rankings:vRankings,
     indexes:vIndexes,screener:vScreener,compare:vCompare,watchlist:vWatchlist,portfolio:vPortfolio,
     alerts:vAlerts,learn:vLearn,methodology:vMethod,product:vProduct,index:vIndexDetail};
-  (V[state.view]||vOverview)(body);
+  (V[state.view]||vHome)(body);
   const subEl=body.querySelector(".sub");
   if(subEl&&PAGE_HELP[state.view]&&PAGE_HELP[state.view].length)subEl.after(helpBar(state.view));
   const foot=el("div","footer-note");foot.textContent=META.disclaimer;main.appendChild(foot);
@@ -870,4 +870,110 @@ function vSupport(box){
     t.appendChild(tr);});
   tc.appendChild(t);box.appendChild(tc);
   box.appendChild(el("div","note","Supports are statistical observations about past behavior, not guarantees — floors break. Detection: clustered price lows within ±3%, ≥3 separate touch episodes, ≥60-day span."));
+}
+
+/* ================= HOME (landing) ================= */
+function vHome(box){
+  const hero=el("div","card homehero");
+  const brand=el("div","hb");
+  brand.appendChild(el("div","logo"));
+  const bt=el("div");
+  bt.appendChild(el("div","ht","PMT"));
+  bt.appendChild(el("div","hs","Pokémon Market Tracker"));
+  brand.appendChild(bt);hero.appendChild(brand);
+  hero.appendChild(el("p",null,"Real TCGplayer prices for "+(META.catalogCount||0).toLocaleString()+" cards and sealed products, collected every day since "+(META.windowLabel||"Jan 2025")+" — turned into indexes, rankings, temperatures and signals."));
+  const meta=el("div","hmeta");
+  meta.appendChild(el("span","badge acc","LAST REFRESHED · "+(META.builtAt||META.generated)));
+  meta.appendChild(el("span","badge","REFRESHES DAILY ~21:30 UTC"));
+  meta.appendChild(el("span","badge",META.days+" DAYS OF HISTORY"));
+  hero.appendChild(meta);
+  box.appendChild(hero);
+  const IX={};DATA.indexes.forEach(i=>IX[i.id]=i);
+  const comp=IX.idx_overall;
+  const CARDS=[
+   ["overview","◈","Market overview","The whole market at a glance — the four markets, rotation, and today's signals.",
+    c=>{if(!comp)return;c.appendChild(el("div","grow",grow100(comp.level)));
+      const d=el("div","delta "+pcls(comp.r30));d.textContent=fp(comp.r30)+" · 30d";c.appendChild(d);
+      const sp=el("div");sp.appendChild(spark(comp.series.map((v,j)=>[j,v]),200,30,cssv("--s1")));c.appendChild(sp);}],
+   ["news","◉","Market news","The self-writing journal: what turned hot, hit a floor, or set a high — daily.",
+    c=>{c.appendChild(el("div","note","Fresh headlines every day, written from the data itself."));}],
+   ["hotcold","♨","Hot & Cold","What's thawing, freezing, or on a month-long run — temperature transitions.",
+    c=>{const counts={hot:0,warming:0,stagnant:0,cooling:0,cold:0};
+      const elig=ASSETS.filter(a=>a.eligible.eligible);elig.forEach(a=>counts[a.scores.temp]!=null&&counts[a.scores.temp]++);
+      const bar=el("div");bar.style.cssText="display:flex;height:12px;border-radius:6px;overflow:hidden;margin-top:8px";
+      ["hot","warming","stagnant","cooling","cold"].forEach(k=>{const seg=el("div");
+        seg.style.cssText="min-width:1px";seg.style.width=(counts[k]/(elig.length||1)*100)+"%";seg.style.background=TEMP[k].color;bar.appendChild(seg);});
+      c.appendChild(bar);}],
+   ["map","▩","Market map","The whole market as one picture — tiles sized by money, colored by movement.",
+    c=>{const mm=el("div");mm.style.cssText="display:grid;grid-template-columns:2fr 1fr 1fr;gap:3px;height:44px;margin-top:8px";
+      [8,-4,12,-9,3,6].slice(0,6).forEach(v=>{const t2=el("div");t2.style.cssText="border-radius:3px";t2.style.background=heatColor(v,1.4);mm.appendChild(t2);});c.appendChild(mm);}],
+   ["eras","▣","Era dashboards","Nine eras, nine markets — WOTC scarcity to Mega-era hype, each with its own index.",
+    c=>{const row=el("div");row.style.marginTop="8px";erasPresent().slice(0,5).forEach(e=>row.appendChild(el("span","badge",e)));c.appendChild(row);}],
+   ["rankings","≡","Rankings","Twenty boards, eligibility-gated — meaningful movers, quality, breakouts.",
+    c=>{const b=BOARDS.find(x=>x.id==="mom_gain");const top=boardItems(b,null,null,1)[0];
+      if(top){const r2=el("div","note");r2.textContent="Top meaningful gainer: "+top.name+" "+fp(MP(top,"mom"));c.appendChild(r2);}}],
+   ["support","▁","Support lines","Tested price floors — who's sitting on one, who just fell through.",
+    c=>{const n=ASSETS.filter(a=>a.supports&&a.supports.state==="on"&&a.eligible.eligible).length;
+      c.appendChild(el("div","note",n+" assets currently on a tested floor"));}],
+   ["screener","⌕","Screener","Filter everything by price, era, language and scores. Sort any column.",null],
+   ["singles","▤","Singles desk","Individual cards only — boards, segments, the full table.",null],
+   ["sealed","▦","Sealed desk","Boxes, ETBs and bundles — supply only shrinks.",null],
+   ["indexes","∿","Indexes","Every basket as growth-of-$100 with its temperature.",null],
+   ["compare","⇄","Compare","Up to four assets on one fair, rebased chart.",null],
+   ["alerts","◷","Alert center","Today's triggered signals plus your own rules.",null],
+   ["portfolio","▥","Portfolio","A collection marked to real market, with honest exit math.",null],
+   ["learn","✦","Learn the basics","Every metric in plain English — 3 minutes, no finance background.",null],
+  ];
+  const g=el("div","homecards");
+  CARDS.forEach(([view,icon,title,desc,vis])=>{
+    const c=el("button","card hc");c.onclick=()=>go(view);
+    const hr2=el("div","hchead");hr2.appendChild(el("span","hcicon",icon));hr2.appendChild(el("b",null,title));c.appendChild(hr2);
+    c.appendChild(el("p",null,desc));
+    if(vis)try{vis(c);}catch(e){}
+    g.appendChild(c);});
+  box.appendChild(g);
+}
+
+/* ================= NEWS ================= */
+let NEWSDATA=null,NEWS_P=null;
+function loadNews(){
+  if(NEWSDATA)return Promise.resolve(NEWSDATA);
+  if(typeof window!=="undefined"&&window.NEWS){NEWSDATA=window.NEWS;return Promise.resolve(NEWSDATA);}
+  if(!location.protocol.startsWith("http"))return Promise.resolve(null);
+  NEWS_P=NEWS_P||fetch("news.json?v="+Date.now()).then(r=>r.json()).then(d=>{NEWSDATA=d;return d;}).catch(()=>null);
+  return NEWS_P;}
+const NEWS_TYPES={hot:["🔥","Turned hot"],cold:["❄","Turned cold"],floor:["🛡","At support"],
+  break:["⚠","Floor broken"],high:["⬆","New high"],cross:["↗","Trend reclaimed"],move:["⚡","Big move"]};
+let newsFilter="all";
+function vNews(box){
+  box.appendChild(el("div","h1","Market news"));
+  box.appendChild(el("div","sub","A self-writing journal: every night the data is scanned for stories — temperature changes, tested floors reached or broken, new highs, trend reclaims — and written up with analytical context. No hype, no humans, refreshed daily."));
+  const f=el("div","filters");
+  pills(f,"Show",[["all","All"],...Object.entries(NEWS_TYPES).map(([k,v])=>[k,v[0]+" "+v[1]])],newsFilter,v=>{newsFilter=v;render();});
+  box.appendChild(f);
+  const holder=el("div");box.appendChild(holder);
+  holder.appendChild(el("div","empty","Loading the journal…"));
+  loadNews().then(nd=>{
+    holder.textContent="";
+    if(!nd||!nd.days||!nd.days.length){holder.appendChild(el("div","empty","No news available — it generates with the next daily refresh."));return;}
+    const today=META.windowEnd;
+    nd.days.forEach(day=>{
+      const items=day.items.filter(it=>newsFilter==="all"||it.type===newsFilter);
+      if(!items.length)return;
+      const label=day.date===today?"Today · "+day.date:day.date;
+      holder.appendChild(el("div","sec-title",label));
+      const c=el("div","card");c.style.padding="6px 16px";
+      items.forEach(it=>{
+        const row=el("button","newsrow");row.onclick=()=>go("product",it.id);
+        const im=cardImg({pid:it.pid},"200x200");if(im)row.appendChild(im);
+        const tx=el("span");tx.style.cssText="flex:1;min-width:0";
+        const l1=el("div");l1.style.cssText="display:flex;align-items:center;gap:7px;flex-wrap:wrap";
+        const tmeta=NEWS_TYPES[it.type]||["◈",it.type];
+        l1.appendChild(el("span","badge acc",tmeta[0]+" "+tmeta[1].toUpperCase()));
+        l1.appendChild(el("small",null,it.set+" · "+fm(it.price)));tx.appendChild(l1);
+        const body=el("div","newstext");body.textContent=it.text;tx.appendChild(body);
+        row.appendChild(tx);c.appendChild(row);});
+      holder.appendChild(c);});
+    if(!holder.childNodes.length)holder.appendChild(el("div","empty","Nothing matches this filter in the last 30 days."));
+  });
 }

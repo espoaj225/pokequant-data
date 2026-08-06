@@ -241,3 +241,26 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
 .segrow .st b{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--baseline)}
 .segrow .sv{flex:0 0 58px;text-align:right;font-variant-numeric:tabular-nums;font-weight:650}
 @media (max-width:700px){.segrow .sl{flex-basis:110px}}
+
+/* ---------- v9: home + news ---------- */
+.homehero{padding:26px 26px 20px}
+.homehero .hb{display:flex;align-items:center;gap:14px;margin-bottom:10px}
+.homehero .logo{width:44px;height:44px;border-radius:50%;background:conic-gradient(from 180deg,var(--s1) 0 50%,var(--surface2) 50% 100%);border:3px solid var(--ink);position:relative;flex:none}
+.homehero .logo::after{content:"";position:absolute;inset:13px;border-radius:50%;background:var(--surface);border:3px solid var(--ink)}
+.homehero .ht{font-size:34px;font-weight:800;letter-spacing:1px;line-height:1}
+.homehero .hs{font-size:13px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase}
+.homehero p{color:var(--ink2);max-width:760px;font-size:14.5px;line-height:1.55}
+.homehero .hmeta{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.homecards{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:12px;margin-top:14px}
+.hc{text-align:left;cursor:pointer;transition:transform .08s, border-color .08s}
+.hc:hover{transform:translateY(-2px);border-color:var(--accent)}
+.hc .hchead{display:flex;align-items:center;gap:9px;margin-bottom:5px}
+.hc .hcicon{width:28px;height:28px;border-radius:8px;background:var(--wash);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+.hc b{font-size:13.5px}
+.hc p{font-size:12.3px;color:var(--ink2);line-height:1.45}
+.hc .grow{font-size:20px;font-weight:650;margin-top:6px}
+.newsrow{display:flex;gap:12px;width:100%;text-align:left;padding:11px 2px;border-top:1px solid var(--grid);align-items:flex-start}
+.newsrow:first-child{border-top:none}
+.newsrow:hover{background:var(--surface2)}
+.newsrow .cardthumb{width:44px;height:44px}
+.newstext{font-size:13.3px;color:var(--ink2);line-height:1.5;margin-top:4px}
