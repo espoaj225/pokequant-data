@@ -212,7 +212,34 @@ EOM_PREV = END.replace(day=1) - timedelta(days=1)
 EOM_PREV2 = EOM_PREV.replace(day=1) - timedelta(days=1)
 YTD_BASE = date(END.year - 1, 12, 31)
 
-AUX_LAST = AUX.sort_values("date").groupby("product_id").last()
+# v12 (3a): scope listing structure + recent marks to each product's PRIMARY
+# printing — mixing printings put a $26 mid listing under a $134 header price
+# and rendered two rows per date in "Recent daily marks".
+_prim = pd.DataFrame({"product_id": list(PRIMARY.keys()), "subtype": list(PRIMARY.values())})
+AUX_P = AUX.merge(_prim, on=["product_id", "subtype"], how="inner")
+AUX_LAST = AUX_P.sort_values("date").groupby("product_id").last()
+# latest row per (product, printing) — feeds the printing selector on product pages
+_ALL_LAST = AUX.sort_values("date").groupby(["product_id", "subtype"], observed=True).last().reset_index()
+PRINT_ROWS = {int(pid): grp for pid, grp in _ALL_LAST.groupby("product_id")}
+
+def _num(v, r=2):
+    return None if pd.isna(v) else round(float(v), r)
+
+def printings_for(pid):
+    """All printings with a recent real quote, when there is more than one."""
+    grp = PRINT_ROWS.get(pid)
+    if grp is None or len(grp) < 2:
+        return None
+    out = []
+    for _, r in grp.iterrows():
+        if pd.isna(r["market"]) and pd.isna(r["low"]):
+            continue
+        st = str(r["subtype"])
+        out.append({"name": st, "market": _num(r["market"]), "low": _num(r["low"]),
+                    "mid": _num(r["mid"]), "high": _num(r["high"]), "directLow": _num(r["direct_low"]),
+                    "date": str(r["date"]), "primary": st == str(PRIMARY.get(pid)),
+                    "marks": recent_marks(pid, subtype=st)})
+    return out if len(out) >= 2 else None
 
 def compute(pid, s):
     p = s["p"]; now = float(p[-1]); m = {}
@@ -407,8 +434,9 @@ def commentary(name, m, s):
     bits.append("Sales-volume and eBay metrics are not yet collected; price-based indicators only.")
     return " ".join(bits[:4])
 
-def recent_marks(pid, n=7):
-    sub = AUX[AUX["product_id"] == pid].sort_values("date", ascending=False)
+def recent_marks(pid, n=7, subtype=None):
+    src = AUX_P if subtype is None else AUX[AUX["subtype"] == subtype]
+    sub = src[src["product_id"] == pid].sort_values("date", ascending=False)
     out = []
     for _, r in sub.iterrows():
         if pd.isna(r["market"]) and pd.isna(r["low"]): continue
@@ -466,6 +494,7 @@ for pid in tier:
         "scenario": scenario(now, m, sc), "commentary": commentary(meta["name"], m, sc),
         "supports": find_supports(s["p"], s["startIdx"]),
         "recentMarks": recent_marks(pid),
+        "printings": printings_for(pid),
         "series": {"startIdx": s["startIdx"], "p": [round(float(x), rnd) for x in s["p"]]},
     })
 
@@ -735,10 +764,12 @@ def build_news(lookback=30):
             d1 = (p[i] / p[i-1] - 1) * 100 if p[i-1] else 0
             if t[i] == 4 and t[i-1] != 4:
                 r30v = (p[i] / p[i-31] - 1) * 100
-                why = (f"up {r30v:.0f}% over the past month and above its trend lines" if r30v >= 8
-                       else f"up {max(r30v,0):.0f}% this month with week, month and quarter all pointing up")
-                ev = ("hot", 4, f"{a['name']} just turned HOT — {why}. "
-                      f"Confirmed multi-week strength like this has often extended, though hot streaks can reverse without warning.")
+                # v12 (3d): a "turned HOT" story with a ~0% month is self-contradictory — skip it
+                if r30v >= 0.5:
+                    why = (f"up {r30v:.0f}% over the past month and above its trend lines" if r30v >= 8
+                           else f"up {r30v:.0f}% this month with week, month and quarter all pointing up")
+                    ev = ("hot", 4, f"{a['name']} just turned HOT — {why}. "
+                          f"Confirmed multi-week strength like this has often extended, though hot streaks can reverse without warning.")
             elif t[i] == 0 and t[i-1] != 0:
                 r30v = (p[i] / p[i-31] - 1) * 100
                 why = (f"down {abs(r30v):.0f}% on the month and below trend" if r30v <= -8

@@ -243,6 +243,7 @@ function go(view,param){
   location.hash=h;} // hashchange listener applies state + renders
 function applyHash(){
   const m=(location.hash||"").match(/^#\/([A-Za-z]+)(?:\/(.+))?$/);
+  if(m&&m[1]==="map"){location.replace(location.href.split("#")[0]+"#/screener");return;} // map retired -> screener
   if(m){state.view=m[1];state.param=m[2]!=null?decodeURIComponent(m[2]):null;}
   else{state.view="home";state.param=null;}
   hideTip();render();scrollTo({top:0});}
@@ -311,41 +312,6 @@ function cardImg(a,size,cls){
 /* ---------- growth-of-$100 framing ---------- */
 function grow100(level){return "$100 → $"+Math.round(level).toLocaleString();}
 
-/* ---------- squarified treemap layout ---------- */
-function squarify(items,x,y,w,h){
-  // items: [{v (value>0), ...}] sorted desc. Returns items with x,y,w,h set.
-  const total=items.reduce((s,i)=>s+i.v,0);if(!total)return items;
-  const scale=w*h/total;
-  let row=[],rest=items.slice(),rx=x,ry=y,rw=w,rh=h;
-  function worst(row,len){
-    const s=row.reduce((a,i)=>a+i.v*scale,0);
-    let mx=0;
-    for(const i of row){const a=i.v*scale;
-      mx=Math.max(mx,Math.max(len*len*a/(s*s),s*s/(len*len*a)));}
-    return mx;}
-  function layout(row,horiz){
-    const s=row.reduce((a,i)=>a+i.v*scale,0);
-    const len=horiz?rw:rh;const breadth=s/len;
-    let off=0;
-    for(const i of row){const frac=(i.v*scale)/s;
-      if(horiz){i.x=rx+off*rw;i.y=ry;i.w=frac*rw;i.h=breadth;}
-      else{i.x=rx;i.y=ry+off*rh;i.w=breadth;i.h=frac*rh;}
-      off+=frac;}
-    if(horiz){ry+=breadth;rh-=breadth;}else{rx+=breadth;rw-=breadth;}}
-  while(rest.length){
-    const horiz=rw>=rh;const len=horiz?rw:rh;
-    const it=rest[0];
-    if(!row.length||worst([...row,it],Math.min(rw,rh))<=worst(row,Math.min(rw,rh))){
-      row.push(it);rest.shift();}
-    else{layout(row,rw<rh);row=[];}
-    if(!rest.length&&row.length)layout(row,rw<rh);}
-  return items;}
-function heatColor(pct,alphaBoost){
-  // diverging: red (loss) -> neutral -> green (gain), magnitude-capped at ±15%
-  const v=Math.max(-15,Math.min(15,pct||0))/15;
-  const a=(0.12+0.55*Math.abs(v))*(alphaBoost||1);
-  return v>=0?`rgba(12,163,12,${a})`:`rgba(208,59,59,${a})`;}
-
 /* ================= plain-language layer: glossary, hints, page legends ================= */
 const GLOSSARY={
  price:["Market price","What this actually sells for on TCGplayer right now, based on real sales — not the (often higher) asking prices."],
@@ -399,9 +365,6 @@ const PAGE_HELP={
   "The four panels are four SEPARATE markets — sealed boxes and single cards, modern and vintage, barely move together.",
   "Temperature chips (🔥→❄) are the fastest read: is this thing rising, sideways, or falling?",
   "The rotation strip shows which of the four markets led each quarter — leadership changes hands."],
- map:["Each rectangle is a set (or card, once you drill in). Bigger = more tracked money in it.",
-  "Green = price rising, red = falling, over the period you pick above. The % is printed on every readable tile.",
-  "Click a set to see its cards; click a card to open its full page."],
  singles:["Only individual cards here — sealed boxes live on their own desk because they behave differently.",
   "Boards are eligibility-gated: cheap or barely-traded items can't clutter them.",
   "Click any row to open the card's full page."],
@@ -538,3 +501,115 @@ function sparkArr(a,w,h){
   if(a.spark90&&a.spark90.length>1)return spark(a.spark90.map((v,i)=>[i,v]),w,h);
   if(a.series&&a.series.p)return spark(sliceRange(a,90),w,h);
   return el("span","note","–");}
+
+/* ================= v12: search engine =================
+   Hand-rolled (no MiniSearch/Fuse): the whole app ships as ONE self-contained
+   HTML file (incl. the offline snapshot), so zero dependencies keeps that true;
+   and the ranking spec (exact > prefix > name-tokens > name+set > fuzzy, price
+   as tie-break only) is easier to guarantee by hand than by fighting a library
+   scorer. 55K records scan in a few ms with precomputed normalized strings;
+   fuzzy runs over a ~30K-token vocabulary only when exact matching comes up
+   short, so the common path stays fast. */
+function sNorm(s){return String(s).toLowerCase().normalize("NFD")
+  .replace(/[\u0300-\u036f]/g,"").replace(/['’]/g,"")
+  .replace(/[^a-z0-9]+/g," ").replace(/\s+/g," ").trim();}
+const SEARCH_SYN=[["etb","elite trainer box"],["upc","ultra premium collection"],
+  ["bb","booster box"],["sir","special illustration rare"],
+  ["alt art","alternate full art"],["1st ed","1st edition"],["jp","japanese"],
+  ["sm","sun & moon"],["swsh","sword & shield"],["sv","scarlet & violet"]]
+  .map(([a,b])=>[sNorm(a),sNorm(b)]);
+function synVariants(nq){
+  const out=new Set([nq]),pad=s=>" "+s+" ";
+  for(const [a,b] of SEARCH_SYN){
+    for(const v of [...out]){
+      const pv=pad(v);
+      if(pv.includes(pad(a)))out.add(pv.split(pad(a)).join(" "+b+" ").replace(/\s+/g," ").trim());
+      if(pv.includes(pad(b)))out.add(pv.split(pad(b)).join(" "+a+" ").replace(/\s+/g," ").trim());
+    }
+    if(out.size>=8)break;}
+  return [...out];}
+/* Damerau-Levenshtein (optimal string alignment), capped: returns cap+1 early
+   when the distance must exceed cap. */
+function dlDist(a,b,cap){
+  const la=a.length,lb=b.length;
+  if(Math.abs(la-lb)>cap)return cap+1;
+  let p2=null,p1=[...Array(lb+1)].map((_,j)=>j),cur=new Array(lb+1);
+  for(let i=1;i<=la;i++){
+    cur[0]=i;let rowMin=cur[0];
+    for(let j=1;j<=lb;j++){
+      const cost=a[i-1]===b[j-1]?0:1;
+      let v=Math.min(p1[j]+1,cur[j-1]+1,p1[j-1]+cost);
+      if(i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1])v=Math.min(v,p2[j-2]+cost);
+      cur[j]=v;if(v<rowMin)rowMin=v;}
+    if(rowMin>cap)return cap+1;
+    p2=p1;p1=cur;cur=p2===p1?new Array(lb+1):cur;
+    cur=new Array(lb+1);}
+  return p1[lb];}
+function fuzzCap(tok){return tok.length<=3?0:(tok.length<=7?1:2);}
+/* index: built once from ASSETS, extended once when the full catalog arrives */
+let SIDX=null,SVOCAB=null,SIDX_HAS_CAT=false;
+function buildSearchIndex(){
+  if(SIDX&&(SIDX_HAS_CAT||!CATALOG))return SIDX;
+  const recs=[],vocab=new Set();
+  const push=(id,name,set,extra,price,chg,full)=>{
+    const nName=sNorm(name),nAll=(nName+" "+sNorm(set+" "+extra)).trim();
+    const toks=nAll.split(" ").filter(Boolean);
+    toks.forEach(t=>vocab.add(t));
+    recs.push({id,name,set,price,chg,full,nName,nAll,toks});};
+  ASSETS.forEach(a=>push(a.id,a.name,a.set,(a.character||"")+" "+(a.nickname||""),
+    a.price,a.metrics&&a.metrics.r30?a.metrics.r30.pct:null,true));
+  if(CATALOG){CATALOG.forEach(r=>{if(!r[7])push("p"+r[0],r[1],r[2],"",r[5],r[6],false);});SIDX_HAS_CAT=true;}
+  SIDX=recs;SVOCAB=[...vocab];
+  return SIDX;}
+/* tiers: 0 exact name · 1 name starts with query · 2 all tokens in name
+          3 all tokens in name+set · 4 fuzzy */
+function searchQuery(qRaw,wantSuggest){
+  const nq0=sNorm(qRaw);
+  if(!nq0)return{hits:[],total:0};
+  const recs=buildSearchIndex(),variants=synVariants(nq0),best=new Map();
+  const consider=(r,tier)=>{const b=best.get(r.id);if(!b||tier<b.tier)best.set(r.id,{r,tier});};
+  for(const nq of variants){
+    const toks=nq.split(" ");
+    for(const r of recs){
+      let all=true;
+      for(const t of toks)if(!r.nAll.includes(t)){all=false;break;}
+      if(!all)continue;
+      let tier=3,inName=true;
+      for(const t of toks)if(!r.nName.includes(t)){inName=false;break;}
+      if(inName)tier=r.nName===nq?0:(r.nName.startsWith(nq)?1:2);
+      consider(r,tier);}}
+  if(best.size<12){ /* fuzzy pass only when exact matching comes up short */
+    for(const nq of variants){
+      const toks=nq.split(" ");
+      const fsets=toks.map(t=>{
+        const cap=fuzzCap(t);if(!cap)return null;
+        const s=new Set();
+        for(const w of SVOCAB)if(dlDist(t,w,cap)<=cap)s.add(w);
+        return s;});
+      for(const r of recs){
+        if(best.has(r.id))continue;
+        let ok=true;
+        for(let i=0;i<toks.length;i++){
+          const t=toks[i];
+          if(r.nAll.includes(t))continue;
+          const fs=fsets[i];
+          if(fs&&fs.size&&r.toks.some(w=>fs.has(w)))continue;
+          ok=false;break;}
+        if(ok)consider(r,4);}}}
+  const hits=[...best.values()].sort((x,y)=>x.tier-y.tier||(y.r.price||0)-(x.r.price||0));
+  const out={hits,total:hits.length};
+  if(!hits.length&&wantSuggest)out.suggestions=didYouMean(nq0,recs);
+  return out;}
+function didYouMean(nq,recs){
+  const target=nq.replace(/ /g,""),cand=[];
+  for(const w of SVOCAB){
+    if(w.length<3||Math.abs(w.length-target.length)>3)continue;
+    const d=dlDist(target,w,3);
+    if(d<=3)cand.push([d,w]);}
+  cand.sort((a,b)=>a[0]-b[0]||b[1].length-a[1].length);
+  const names=[],seen=new Set();
+  for(const [,w] of cand){
+    const r=recs.find(r=>r.toks.includes(w)&&!seen.has(r.name));
+    if(r){seen.add(r.name);names.push({label:r.name,id:r.id});}
+    if(names.length>=3)break;}
+  return names;}

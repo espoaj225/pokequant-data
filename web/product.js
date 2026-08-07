@@ -1,6 +1,6 @@
 /* ================= product page + portfolio ================= */
 "use strict";
-const prodState={range:180,showMA:true};
+const prodState={range:180,showMA:true,printing:null,printingFor:null};
 
 function vProduct(box){
   const a=BYID[state.param];
@@ -8,6 +8,11 @@ function vProduct(box){
     if(/^p\d+$/.test(state.param||"")){vProductLazy(box,parseInt(state.param.slice(1)));return;}
     go("overview");return;}
   const m=a.metrics,s=a.scores,S=SER();
+  // v12 (3a): printing selection — every panel scopes to ONE printing, never a mix
+  if(prodState.printingFor!==a.id){prodState.printingFor=a.id;prodState.printing=null;}
+  const prints=a.printings||null;
+  const selP=prints&&prodState.printing?prints.find(x=>x.name===prodState.printing&&!x.primary)||null:null;
+  const shownPrice=selP?(selP.market!=null?selP.market:a.price):a.price;
   const bk=el("button","iconbtn","← Back");
   bk.onclick=()=>goBack("overview");
   box.appendChild(bk);
@@ -30,16 +35,33 @@ function vProduct(box){
     ["REAL TCGPLAYER HISTORY · "+m.realDays+" DAYS","acc"],
     a.trophy?["THIN MARKET — SPORADIC PRICING","wrn"]:null].filter(Boolean);
   badges.forEach(([t,cls])=>bd.appendChild(el("span","badge "+cls,t)));
-  left.appendChild(bd);lwrap.appendChild(left);ph.appendChild(lwrap);
+  left.appendChild(bd);
+  // v12 (3a): printing selector — shown only when TCGplayer quotes >1 printing
+  if(prints&&prints.length>1){
+    const pr=el("div","filters");pr.style.marginTop="8px";
+    pr.appendChild(el("span","fl","Printing"));
+    prints.forEach(p2=>{
+      const on=selP?selP.name===p2.name:p2.primary;
+      const b=el("button","pill"+(on?" on":""),
+        p2.name+(p2.market!=null?" · "+fm(p2.market):"")+(p2.primary?" ★":""));
+      b.title=p2.primary?"Primary printing — full history, charts and scores track this one":"Latest real quotes for this printing";
+      b.onclick=()=>{prodState.printing=p2.primary?null:p2.name;render();};
+      pr.appendChild(b);});
+    left.appendChild(pr);}
+  lwrap.appendChild(left);ph.appendChild(lwrap);
   const right=el("div");right.style.textAlign="right";
-  const pw=el("div");pw.appendChild(el("span","pricebig",fm(a.price)));
+  const pw=el("div");pw.appendChild(el("span","pricebig",fm(shownPrice)));
   pw.appendChild(starBtn(a));right.appendChild(pw);
-  right.appendChild(el("div","note","estimated market value · "+META.generated));
+  right.appendChild(el("div","note",(selP?selP.name+" market value · ":"estimated market value · ")+META.generated));
   const dl=el("div","deltas");dl.style.justifyContent="flex-end";
   [["7D","r7"],["30D","r30"],["MoM","mom"],["6M","r180"],["1Y","r1y"]].forEach(([lab,k])=>{
     const mm=m[k];const sp=el("span",pcls(mm?mm.pct:null));
     sp.appendChild(el("small",null,lab));sp.appendChild(document.createTextNode(mm?fp(mm.pct):"–"));dl.appendChild(sp);});
   right.appendChild(dl);ph.appendChild(right);box.appendChild(ph);
+  if(selP){
+    const c=el("div","callout");
+    c.textContent="Viewing the "+selP.name+" printing: the price above, listing structure and recent marks are its latest real quotes ("+selP.date+"). Charts, scores and performance history track the primary printing ("+m.subtype+") — the one with the deepest daily data.";
+    c.style.marginBottom="12px";box.appendChild(c);}
   if(!a.eligible.eligible){
     const c=el("div","callout");c.textContent="Excluded from major rankings: "+a.eligible.reasons.join("; ")+".";
     c.style.marginBottom="12px";box.appendChild(c);}
@@ -96,15 +118,18 @@ function vProduct(box){
    .forEach(([k,v])=>{if(v==null)return;const kv=el("div","kv");kv.appendChild(el("span",null,k));
      const b=el("b");b.textContent=v;kv.appendChild(b);fc.appendChild(kv);});
   rail.appendChild(fc);
-  // real listing structure
+  // real listing structure — scoped to the selected printing (v12: 3a)
+  const L=selP?{price:selP.market,low:selP.low,mid:selP.mid,high:selP.high,dl:selP.directLow,
+      spread:(selP.low!=null&&selP.mid)?Math.round((selP.mid-selP.low)/selP.mid*1000)/10:null}
+    :{price:a.price,low:m.listLow,mid:m.listMid,high:m.listHigh,dl:m.directLow,spread:m.spreadPct};
   const mp=el("div","card");mp.appendChild(el("h3",null,"Listing structure — real, latest day"));
-  mp.appendChild(el("div","hint","How the live listings are priced around the market value"));
-  [["Market price",fm(a.price)],["Lowest listing",m.listLow!=null?fm(m.listLow):"–"],
-   ["Mid listing",m.listMid!=null?fm(m.listMid):"–"],["Highest listing",m.listHigh!=null?fm(m.listHigh):"–"],
-   ["Direct low",m.directLow!=null?fm(m.directLow):"–"],
-   ["Listed spread (low→mid)",m.spreadPct!=null?m.spreadPct+"%":"–"]].forEach(([k,v])=>{const kv=el("div","kv");
+  mp.appendChild(el("div","hint","How the live listings are priced around the market value · "+(selP?selP.name:m.subtype)));
+  [["Market price",L.price!=null?fm(L.price):"–"],["Lowest listing",L.low!=null?fm(L.low):"–"],
+   ["Mid listing",L.mid!=null?fm(L.mid):"–"],["Highest listing",L.high!=null?fm(L.high):"–"],
+   ["Direct low",L.dl!=null?fm(L.dl):"–"],
+   ["Listed spread (low→mid)",L.spread!=null?L.spread+"%":"–"]].forEach(([k,v])=>{const kv=el("div","kv");
     kv.appendChild(el("span",null,k));const b=el("b");b.textContent=v;kv.appendChild(b);mp.appendChild(kv);});
-  if((m.spreadPct||0)>20){const w=el("div","callout");w.textContent="⚠ Wide spread: the lowest listing sits far under mid. The quoted value is soft — expect negotiation room.";
+  if((L.spread||0)>20){const w=el("div","callout");w.textContent="⚠ Wide spread: the lowest listing sits far under mid. The quoted value is soft — expect negotiation room.";
     w.style.marginTop="8px";mp.appendChild(w);}
   rail.appendChild(mp);
   // data coverage
@@ -190,9 +215,9 @@ function vProduct(box){
   risks.push("No sales-volume data collected yet: price trends here are unconfirmed by transaction counts until that source is added.");
   risks.push("Collectibles risk: no cash flows — value depends entirely on future collector demand.");
   risks.forEach(r=>ul.appendChild(el("li",null,r)));rk.appendChild(ul);g3.appendChild(rk);
-  const rs=el("div","card");rs.appendChild(el("h3",null,"Recent daily marks — real"));
+  const rs=el("div","card");rs.appendChild(el("h3",null,"Recent daily marks — real · "+(selP?selP.name:m.subtype)));
   const st=el("table");const hr2=el("tr");["Date","Market","Low","Mid","High"].forEach(h=>{const th=document.createElement("th");th.textContent=h;hr2.appendChild(th);});st.appendChild(hr2);
-  (a.recentMarks||[]).forEach(x=>{const tr=el("tr");tr.appendChild(el("td",null,x.date));
+  ((selP?selP.marks:a.recentMarks)||[]).forEach(x=>{const tr=el("tr");tr.appendChild(el("td",null,x.date));
     [x.market,x.low,x.mid,x.high].forEach(v=>{const td=document.createElement("td");
       td.textContent=v!=null?fm(v):"–";tr.appendChild(td);});st.appendChild(tr);});
   rs.appendChild(st);g3.appendChild(rs);box.appendChild(g3);
@@ -251,7 +276,7 @@ function vPortfolio(box){
       if(ok)pts.push([i,v]);}
     lineChart(cb,[{name:"Portfolio",color:SER()[0],pts}],{h:240,area:true,yFmt:v=>fmc(v)});});
   // allocation
-  const g2=el("div","grid g3");g2.style.marginTop="14px";
+  const g2=el("div","grid g2");g2.style.marginTop="14px";
   const alloc=(title,fn)=>{const c2=el("div","card");c2.appendChild(el("h3",null,title));
     const groups={};rows.forEach(r=>{const k=fn(r.a);groups[k]=(groups[k]||0)+r.val;});
     Object.entries(groups).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>{
@@ -263,7 +288,9 @@ function vPortfolio(box){
     return c2;};
   g2.appendChild(alloc("Sealed vs singles",a=>a.type==="sealed"?"Sealed":"Singles"));
   g2.appendChild(alloc("Vintage vs modern",a=>a.era==="vintage"?"Vintage":"Modern"));
-  g2.appendChild(alloc("Character concentration",a=>a.character||a.set));
+  // v12 (3e): sets and characters are different dimensions — one card each
+  g2.appendChild(alloc("Set concentration",a=>a.set));
+  g2.appendChild(alloc("Character concentration",a=>a.character||"No single character (sealed/other)"));
   box.appendChild(g2);
   // holdings table
   box.appendChild(el("div","sec-title","Holdings"));

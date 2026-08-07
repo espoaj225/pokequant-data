@@ -1,6 +1,6 @@
 /* ================= PokeQuant views ================= */
 "use strict";
-const NAV=[["sec","Markets"],["home","⌂","Home"],["overview","◈","Market overview"],["news","◉","Market news"],["hotcold","♨","Hot & Cold"],["map","▩","Market map"],["eras","▣","Era dashboards"],
+const NAV=[["sec","Markets"],["home","⌂","Home"],["overview","◈","Market overview"],["news","◉","Market news"],["hotcold","♨","Hot & Cold"],["eras","▣","Era dashboards"],
   ["singles","▤","Singles desk"],["sealed","▦","Sealed desk"],
   ["rankings","≡","Rankings"],["indexes","∿","Indexes"],
   ["sec","Research"],["screener","⌕","Screener"],["support","▁","Support lines"],["compare","⇄","Compare"],["alerts","◷","Alert center"],
@@ -39,26 +39,66 @@ function render(){
   const sw=el("div","searchwrap");sw.appendChild(el("span","sic","⌕"));
   const inp=el("input");inp.placeholder="Search all "+(META.catalogCount||ASSETS.length).toLocaleString()+" tracked cards & products…";
   inp.setAttribute("aria-label","Search assets");
+  inp.setAttribute("role","combobox");inp.setAttribute("aria-expanded","false");
+  inp.setAttribute("aria-autocomplete","list");inp.setAttribute("aria-controls","searchlist");
   const res=el("div","results");res.style.display="none";
-  inp.addEventListener("focus",()=>loadCatalog().then(()=>{if(inp.value.trim().length>=2)inp.dispatchEvent(new Event("input"));}));
-  inp.addEventListener("input",()=>{
-    const q=inp.value.trim().toLowerCase();res.textContent="";
-    if(q.length<2){res.style.display="none";return;}
-    const hits=ASSETS.filter(a=>(a.name+" "+a.set+" "+(a.character||"")+" "+(a.nickname||"")).toLowerCase().includes(q)).slice(0,7);
+  res.id="searchlist";res.setAttribute("role","listbox");
+  let srows=[],hi=-1;
+  const closeRes=()=>{res.style.display="none";inp.setAttribute("aria-expanded","false");
+    inp.removeAttribute("aria-activedescendant");srows=[];hi=-1;};
+  const openRes=()=>{res.style.display="block";inp.setAttribute("aria-expanded","true");};
+  const setHi=i=>{if(srows[hi])srows[hi].classList.remove("hi");
+    hi=i;
+    if(srows[hi]){srows[hi].classList.add("hi");
+      inp.setAttribute("aria-activedescendant",srows[hi].id);
+      srows[hi].scrollIntoView({block:"nearest"});}
+    else inp.removeAttribute("aria-activedescendant");};
+  const runSearch=()=>{
+    const q=inp.value.trim();res.textContent="";srows=[];hi=-1;
+    if(q.length<2){closeRes();return;}
+    if(!CATALOG&&location.protocol.startsWith("http"))
+      loadCatalog().then(()=>{if(document.activeElement===inp&&inp.value.trim()===q)runSearch();});
+    const {hits,total,suggestions}=searchQuery(q,true);
+    if(!total){
+      const z=el("div","zerostate");
+      z.appendChild(el("div",null,'No matches for "'+q+'"'));
+      if(suggestions&&suggestions.length){
+        const dym=el("div","dym");dym.appendChild(el("span",null,"Did you mean: "));
+        suggestions.forEach(s=>{const b=el("button","dymlink",s.label);
+          b.onmousedown=ev=>ev.preventDefault();
+          b.onclick=()=>{inp.value=s.label;runSearch();};dym.appendChild(b);});
+        z.appendChild(dym);}
+      if(!CATALOG&&location.protocol.startsWith("http"))
+        z.appendChild(el("div","hint","Full catalog still loading — results may appear in a moment."));
+      res.appendChild(z);openRes();return;}
     const addRow=(label,sub,price,onclick)=>{const r=el("button","row");
+      r.id="sres-"+srows.length;r.setAttribute("role","option");
       const l=el("span");l.appendChild(document.createTextNode(label+" "));
       l.appendChild(el("small",null,sub));r.appendChild(l);
       r.appendChild(el("span","mono",fm(price)));
-      r.onclick=()=>{res.style.display="none";inp.value="";onclick();};res.appendChild(r);};
-    hits.forEach(a=>addRow(a.name,a.set,a.price,()=>go("product",a.id)));
-    if(CATALOG&&hits.length<9){
-      const extra=CATALOG.filter(r=>!r[7]&&(r[1]+" "+r[2]).toLowerCase().includes(q)).slice(0,9-hits.length);
-      extra.forEach(r=>addRow(r[1],r[2]+" · full catalog",r[5],()=>go("product","p"+r[0])));}
-    else if(!CATALOG&&location.protocol.startsWith("http"))
-      res.appendChild(el("div","empty","Loading full catalog…"));
-    if(!res.childNodes.length){res.style.display="none";return;}
-    res.style.display="block";});
-  inp.addEventListener("blur",()=>setTimeout(()=>res.style.display="none",180));
+      r.onmousedown=ev=>ev.preventDefault();
+      r.onclick=()=>{closeRes();inp.value="";onclick();};
+      res.appendChild(r);srows.push(r);};
+    hits.slice(0,12).forEach(h=>addRow(h.r.name,h.r.set+(h.r.full?"":" · full catalog"),
+      h.r.price,()=>go("product",h.r.id)));
+    const more=el("button","row viewall","View all "+total.toLocaleString()+" results");
+    more.id="sres-"+srows.length;more.setAttribute("role","option");
+    more.onmousedown=ev=>ev.preventDefault();
+    more.onclick=()=>{closeRes();const v=inp.value.trim();inp.value="";go("search",v);};
+    res.appendChild(more);srows.push(more);
+    openRes();};
+  const deb=(()=>{let t;return()=>{clearTimeout(t);t=setTimeout(runSearch,120);};})();
+  inp.addEventListener("input",deb);
+  inp.addEventListener("focus",()=>loadCatalog().then(()=>{if(document.activeElement===inp&&inp.value.trim().length>=2)runSearch();}));
+  inp.addEventListener("keydown",ev=>{
+    if(res.style.display==="none"){
+      if(ev.key==="Enter"&&inp.value.trim().length>=2){ev.preventDefault();runSearch();}
+      return;}
+    if(ev.key==="ArrowDown"){ev.preventDefault();setHi(Math.min(hi+1,srows.length-1));}
+    else if(ev.key==="ArrowUp"){ev.preventDefault();setHi(Math.max(hi-1,-1));}
+    else if(ev.key==="Enter"){ev.preventDefault();const target=srows[hi>=0?hi:0];if(target)target.click();}
+    else if(ev.key==="Escape"){closeRes();}});
+  inp.addEventListener("blur",()=>setTimeout(closeRes,180));
   sw.appendChild(inp);sw.appendChild(res);tb.appendChild(sw);
   const badge=el("span","demo-badge");
   badge.innerHTML="<b style='color:var(--good)'>LIVE</b> · updated "+(META.builtAt||META.generated)+" · "+META.days+" days of real history";
@@ -68,15 +108,63 @@ function render(){
   main.appendChild(tb);
   const body=el("div");main.appendChild(body);
   shell.appendChild(main);root.appendChild(shell);
-  const V={home:vHome,news:vNews,overview:vOverview,map:vMarketMap,hotcold:vHotCold,eras:vEras,era:vEraDetail,support:vSupport,
+  const V={home:vHome,news:vNews,overview:vOverview,hotcold:vHotCold,eras:vEras,era:vEraDetail,support:vSupport,
     singles:b=>vDesk(b,"single"),sealed:b=>vDesk(b,"sealed"),rankings:vRankings,
     indexes:vIndexes,screener:vScreener,compare:vCompare,watchlist:vWatchlist,portfolio:vPortfolio,
-    alerts:vAlerts,learn:vLearn,methodology:vMethod,product:vProduct,index:vIndexDetail};
+    alerts:vAlerts,learn:vLearn,methodology:vMethod,product:vProduct,index:vIndexDetail,search:vSearch};
   (V[state.view]||vHome)(body);
   const subEl=body.querySelector(".sub");
   if(subEl&&PAGE_HELP[state.view]&&PAGE_HELP[state.view].length)subEl.after(helpBar(state.view));
   const foot=el("div","footer-note");foot.textContent=META.disclaimer;main.appendChild(foot);
 }
+
+/* ---------- v12: full search-results page (#/search/<query>) ---------- */
+function vSearch(box){
+  const q=state.param||"";
+  box.appendChild(el("h2",null,"Search results"));
+  box.appendChild(el("div","sub",'Everything matching "'+q+'" across all '+
+    (META.catalogCount||ASSETS.length).toLocaleString()+" tracked cards & products, best matches first."));
+  const holder=el("div");box.appendChild(holder);
+  const draw=()=>{
+    holder.textContent="";
+    if(!q||q.length<2){holder.appendChild(el("div","empty","Type at least 2 characters in the search bar above."));return;}
+    const {hits,total,suggestions}=searchQuery(q,true);
+    if(!total){
+      const card=el("div","card");
+      card.appendChild(el("div","empty",'No matches for "'+q+'"'));
+      if(suggestions&&suggestions.length){
+        const dym=el("div","dym");dym.style.textAlign="center";dym.style.paddingBottom="18px";
+        dym.appendChild(el("span",null,"Did you mean: "));
+        suggestions.forEach(s=>{const b=el("button","dymlink",s.label);
+          b.onclick=()=>go("search",s.label);dym.appendChild(b);});
+        card.appendChild(dym);}
+      holder.appendChild(card);return;}
+    const card=el("div","card");
+    const CAP=400;
+    card.appendChild(el("div","sec-title",total.toLocaleString()+" results"+
+      (total>CAP?" — showing the top "+CAP+", refine your search to narrow down":"")));
+    const wrap=el("div","tablewrap");const t=el("table");
+    const tr=el("tr");["Asset","Price","30d","Coverage"].forEach(h=>{
+      const th=document.createElement("th");th.textContent=h;tr.appendChild(th);});
+    t.appendChild(tr);
+    hits.slice(0,CAP).forEach(h=>{
+      const r=h.r,row=document.createElement("tr");row.className="click";
+      const c1=document.createElement("td");
+      const nc=el("div","namecell");const w=el("div");
+      w.appendChild(el("div","nm",r.name));w.appendChild(el("small",null,r.set));
+      nc.appendChild(w);c1.appendChild(nc);row.appendChild(c1);
+      const c2=document.createElement("td");c2.className="mono";c2.textContent=fm(r.price);row.appendChild(c2);
+      const c3=document.createElement("td");c3.className="mono";
+      c3.textContent=r.chg!=null?fp(r.chg):"–";
+      if(r.chg!=null)c3.style.color=r.chg>=0?"var(--good)":"var(--bad)";
+      row.appendChild(c3);
+      const c4=document.createElement("td");
+      c4.appendChild(el("span","note",r.full?"full analytics":"price history"));row.appendChild(c4);
+      row.onclick=()=>go("product",r.id);
+      t.appendChild(row);});
+    wrap.appendChild(t);card.appendChild(wrap);holder.appendChild(card);};
+  if(!CATALOG&&location.protocol.startsWith("http"))loadCatalog().then(()=>{if(state.view==="search")draw();});
+  draw();}
 
 /* ---------- shared: asset table ---------- */
 function starBtn(a){const s=el("button","star"+(state.watch.has(a.id)?" on":""),state.watch.has(a.id)?"★":"☆");
@@ -125,6 +213,51 @@ function pills(box,label,options,current,onpick){
   if(label)box.appendChild(el("span","fl",label));
   options.forEach(([id,lab])=>{const p=el("button","pill"+(current===id?" on":""),lab);
     p.onclick=()=>onpick(id);box.appendChild(p);});}
+/* v12: searchable set multi-select (Screener) */
+function setPicker(box,selected,onchange){
+  const wrap=el("span","setpicker");
+  const btn=el("button","pill"+(selected.size?" on":""));
+  const btnLabel=()=>"Sets"+(selected.size?" ("+selected.size+")":"")+" ▾";
+  btn.textContent=btnLabel();
+  const panel=el("div","setpanel");panel.style.display="none";
+  const filt=el("input");filt.type="search";filt.placeholder="Type to filter sets…";
+  panel.appendChild(filt);
+  const listBox=el("div","setlist");panel.appendChild(listBox);
+  const chips=el("span","setchips");
+  const allSets=[...new Set(ASSETS.map(a=>a.set))].sort((a,b)=>a.localeCompare(b));
+  const counts={};ASSETS.forEach(a=>counts[a.set]=(counts[a.set]||0)+1);
+  const drawChips=()=>{chips.textContent="";
+    [...selected].forEach(s=>{const ch=el("button","pill on",s+" ✕");
+      ch.title="Remove "+s;
+      ch.onclick=()=>{selected.delete(s);btn.textContent=btnLabel();btn.classList.toggle("on",!!selected.size);drawChips();drawList();onchange();};
+      chips.appendChild(ch);});};
+  const drawList=()=>{listBox.textContent="";
+    const needle=sNorm(filt.value);
+    const shown=allSets.filter(s=>!needle||sNorm(s).includes(needle));
+    if(!shown.length)listBox.appendChild(el("div","empty","No sets match"));
+    shown.slice(0,200).forEach(s=>{
+      const row=el("label","setrow");
+      const cb=document.createElement("input");cb.type="checkbox";cb.checked=selected.has(s);
+      cb.onchange=()=>{cb.checked?selected.add(s):selected.delete(s);
+        btn.textContent=btnLabel();btn.classList.toggle("on",!!selected.size);drawChips();onchange();};
+      row.appendChild(cb);
+      row.appendChild(el("span",null,s));
+      row.appendChild(el("small",null,counts[s]+""));
+      listBox.appendChild(row);});
+    if(shown.length>200)listBox.appendChild(el("div","hint","+"+(shown.length-200)+" more — keep typing to narrow"));};
+  filt.addEventListener("input",drawList);
+  btn.onclick=()=>{const open=panel.style.display!=="none";
+    panel.style.display=open?"none":"block";
+    if(!open){drawList();
+      panel.style.left="0"; // clamp into the viewport (mobile)
+      const r=panel.getBoundingClientRect();
+      if(r.right>innerWidth-8)panel.style.left=Math.min(0,innerWidth-8-r.right)+"px";
+      filt.focus();}};
+  document.addEventListener("pointerdown",ev=>{if(!wrap.contains(ev.target))panel.style.display="none";});
+  wrap.appendChild(btn);wrap.appendChild(panel);
+  box.appendChild(wrap);box.appendChild(chips);
+  drawChips();}
+
 function pillsMulti(box,label,options,set,onchange){
   // multi-select: "All" pill clears; clicking an option toggles it
   if(label)box.appendChild(el("span","fl",label));
@@ -415,7 +548,18 @@ function vIndexDetail(box){
 const scr={type:"all",era:"all",cond:"all",seg:"all",minQual:0,minConf:0,minMom:0,q:""};
 function vScreener(box){
   box.appendChild(el("div","h1","Screener"));
-  box.appendChild(el("div","sub","Filter the full universe by asset class, era, grading status, price band and minimum scores. Click any column to sort."));
+  box.appendChild(el("div","sub","Filter the full universe by name, set, asset class, era, price band and minimum scores. Click any column to sort."));
+  // v12: free-text filter (reuses the search engine) + searchable set multi-select
+  scr.sets=scr.sets||new Set();
+  const f0=el("div","filters");
+  f0.appendChild(el("span","fl","Filter"));
+  const q=el("input");q.type="search";q.placeholder="name, character, set…";q.value=scr.q||"";
+  q.style.cssText="width:220px";
+  const qdeb=(()=>{let t;return()=>{clearTimeout(t);t=setTimeout(()=>{scr.q=q.value.trim();draw();},150);};})();
+  q.addEventListener("input",qdeb);
+  f0.appendChild(q);
+  setPicker(f0,scr.sets,()=>draw());
+  box.appendChild(f0);
   const f=el("div","filters");
   pills(f,"Class",[["all","All"],["single","Singles"],["sealed","Sealed"]],scr.type,v=>{scr.type=v;render();});
   pills(f,"Language",[["all","All"],["EN","English"],["JP","Japanese"]],scr.lang||"all",v=>{scr.lang=v;render();});
@@ -434,14 +578,21 @@ function vScreener(box){
   box.appendChild(f3);
   const tc=el("div","card");box.appendChild(tc);
   const count=el("div","hint");box.insertBefore(count,tc);
-  function pool(){return ASSETS.filter(a=>
+  function pool(){
+    let base=ASSETS;
+    if(scr.q&&scr.q.length>=2){
+      const ids=new Set(searchQuery(scr.q).hits.map(h=>h.r.id));
+      base=base.filter(a=>ids.has(a.id));}
+    return base.filter(a=>
+    (!scr.sets.size||scr.sets.has(a.set))&&
     (scr.type==="all"||a.type===scr.type)&&
     ((scr.lang||"all")==="all"||a.lang===scr.lang)&&
     (!scr.subEras||!scr.subEras.size||scr.subEras.has(a.subEra))&&
     inSeg(a,scr.seg)&&
     a.scores.quality>=scr.minQual&&a.scores.confidence>=scr.minConf&&a.scores.momentum>=scr.minMom);}
   function draw(){tc.textContent="";const p=pool();
-    count.textContent=p.length+" of "+ASSETS.length+" assets match";
+    count.textContent=p.length+" of "+ASSETS.length+" assets with full analytics match"+
+      (scr.q&&scr.q.length>=2?" — text filter applies the same matching as the search bar":"");
     assetTable(tc,p,{cols:[
       ["Asset",null],["Price",a=>fm(a.price)],["30d",a=>MP(a,"r30")],["MoM",a=>MP(a,"mom")],["6m",a=>MP(a,"r180")],
       ["Mom.",a=>Math.round(a.scores.momentum)],["Spread",a=>M(a,"spreadPct")!=null?M(a,"spreadPct")+"%":"–"],
@@ -553,23 +704,42 @@ function vAlerts(box){
     r.appendChild(l);r.appendChild(el("span","mono",fm(a.price)));
     r.onclick=()=>go("product",a.id);trig.appendChild(r);});
   g.appendChild(trig);
-  // my alerts
+  // my alerts — v12 (3c): validated input, consistent currency, duplicate warning
+  const priceRule=t=>t==="Price above"||t==="Price below";
   const mine=el("div","card");mine.appendChild(el("h3",null,"My alert rules"));
   state.alerts.forEach((al,i)=>{const a=BYID[al.asset];
     const r=el("div");r.style.cssText="display:flex;justify-content:space-between;gap:8px;padding:8px 2px;border-top:1px solid var(--grid)";
     const l=el("span");l.appendChild(el("b",null,a.name));
-    l.appendChild(el("span","note",` · ${al.type} ${fm(al.value)} — ${al.note}`));r.appendChild(l);
+    l.appendChild(el("span","note"," · "+al.type+(priceRule(al.type)&&al.value>0?" "+fm(al.value):"")+" — "+al.note));r.appendChild(l);
     const del=el("button","iconbtn","✕");del.onclick=()=>{state.alerts.splice(i,1);saveDesk();render();};r.appendChild(del);
     mine.appendChild(r);});
   const form=el("div","filters");form.style.marginTop="10px";
   const sel=document.createElement("select");ASSETS.forEach(a=>{const o=document.createElement("option");o.value=a.id;o.textContent=a.name+" — "+a.set;sel.appendChild(o);});
   const typ=document.createElement("select");["Price above","Price below","Volume spike","New high","MA50 cross"].forEach(t=>{const o=document.createElement("option");o.textContent=t;typ.appendChild(o);});
-  const val=el("input");val.type="number";val.placeholder="value";val.style.width="90px";
+  const val=el("input");val.type="number";val.min="0.01";val.step="0.01";val.placeholder="price $";val.style.width="90px";
+  typ.onchange=()=>{val.style.display=priceRule(typ.value)?"":"none";};
   const addb=el("button","pill on","Add alert");
-  addb.onclick=()=>{state.alerts.push({asset:sel.value,type:typ.value,value:+val.value||0,note:"custom"});saveDesk();render();};
   form.append(sel,typ,val,addb);mine.appendChild(form);
+  const err=el("div","note");err.style.cssText="margin-top:6px;min-height:16px";
+  if(alertFlash){err.textContent=alertFlash;err.style.color="var(--warn,#c98500)";alertFlash=null;}
+  mine.appendChild(err);
+  addb.onclick=()=>{
+    err.style.color="var(--bad)";
+    const needsVal=priceRule(typ.value);
+    const v=parseFloat(val.value);
+    if(needsVal&&(!isFinite(v)||v<=0)){
+      err.textContent="Enter a price above $0 for a “"+typ.value+"” rule.";val.focus();return;}
+    const dup=state.alerts.find(al=>al.asset===sel.value&&al.type===typ.value);
+    if(dup&&needsVal&&Math.abs(dup.value-v)<1e-9){
+      err.textContent="That exact rule already exists for "+(BYID[sel.value]||{}).name+".";return;}
+    if(dup&&!needsVal){
+      err.textContent="A “"+typ.value+"” rule already exists for "+(BYID[sel.value]||{}).name+".";return;}
+    if(dup)alertFlash="Added. Note: you now have two “"+typ.value+"” rules for "+(BYID[sel.value]||{}).name+".";
+    state.alerts.push({asset:sel.value,type:typ.value,value:needsVal?v:null,note:"custom"});
+    saveDesk();render();};
   g.appendChild(mine);box.appendChild(g);
 }
+let alertFlash=null;
 
 /* ================= METHODOLOGY ================= */
 function vMethod(box){
@@ -592,64 +762,6 @@ function vMethod(box){
   items.forEach(([t,d])=>{const kv=el("div");kv.style.padding="8px 0";
     kv.appendChild(el("b",null,t+" — "));kv.appendChild(el("span","note",d));c.appendChild(kv);});
   box.appendChild(c);
-}
-
-/* ================= MARKET MAP (treemap) ================= */
-const mapState={drill:null,cls:"all",metric:"r30"};
-function vMarketMap(box){
-  box.appendChild(el("div","h1","Market map"));
-  box.appendChild(el("div","sub","Every tile is sized by tracked market value and colored by price change — green rising, red falling, with the % printed on every readable tile. Click a set to drill into its cards; click a card for its full page."));
-  const f=el("div","filters");
-  pills(f,"Class",[["all","All"],["single","Singles"],["sealed","Sealed"]],mapState.cls,v=>{mapState.cls=v;mapState.drill=null;render();});
-  pills(f,"Color by",[["r30","30-day change"],["mom","Month-over-month"],["r90","3-month change"]],mapState.metric,v=>{mapState.metric=v;render();});
-  if(mapState.drill){const back=el("button","pill on","← All sets");back.onclick=()=>{mapState.drill=null;render();};f.appendChild(back);}
-  box.appendChild(f);
-  const card=el("div","card");const holder=el("div","treemap");card.appendChild(holder);box.appendChild(card);
-  const leg=el("div","tm-legend");
-  leg.appendChild(el("span",null,"falling"));
-  [-12,-6,0,6,12].forEach(v=>{const sw=el("span","sw");sw.style.background=heatColor(v,1.4);leg.appendChild(sw);});
-  leg.appendChild(el("span",null,"rising · tile size = tracked value ("+(mapState.drill?"price":"sum of set's tracked prices")+")"));
-  card.appendChild(leg);
-  const mval=a=>{const mm=a.metrics[mapState.metric];return mm?mm.pct:null;};
-  const pool=ASSETS.filter(a=>(mapState.cls==="all"||a.type===mapState.cls)&&!a.trophy);
-  setTimeout(()=>{
-    const W=holder.clientWidth||900,H=Math.min(640,Math.max(430,W*0.52));
-    holder.style.height=H+"px";
-    let tiles;
-    if(!mapState.drill){
-      const groups={};
-      pool.forEach(a=>{const g=groups[a.set]=groups[a.set]||{name:a.set,v:0,items:[],rs:[]};
-        g.v+=a.price;g.items.push(a);const r=mval(a);if(r!=null)g.rs.push(r);});
-      tiles=Object.values(groups).filter(g=>g.v>50&&g.items.length>=1)
-        .map(g=>({name:g.name,v:g.v,pct:median(g.rs),n:g.items.length,drill:g.name}))
-        .sort((x,y)=>y.v-x.v).slice(0,48);
-    }else{
-      tiles=pool.filter(a=>a.set===mapState.drill)
-        .map(a=>({name:a.name,v:a.price,pct:mval(a),id:a.id,price:a.price,asset:a}))
-        .sort((x,y)=>y.v-x.v).slice(0,80);
-    }
-    if(!tiles.length){holder.appendChild(el("div","empty","Nothing to map with these filters"));return;}
-    squarify(tiles,0,0,W,H);
-    tiles.forEach(t=>{
-      const d=el("div","tmtile");
-      d.style.left=t.x+"px";d.style.top=t.y+"px";d.style.width=t.w+"px";d.style.height=t.h+"px";
-      d.style.background=heatColor(t.pct,1.4);
-      const big=t.w>70&&t.h>44;
-      if(big){d.appendChild(el("div","tn",t.name));
-        const bot=el("div","tv",fp(t.pct));d.appendChild(bot);}
-      d.addEventListener("pointermove",ev=>showTip(ev.clientX,ev.clientY,tp=>{
-        if(t.asset){const im=cardImg(t.asset,"200x200");if(im){im.style.cssText="width:64px;height:64px;object-fit:contain;display:block;margin-bottom:5px";tp.appendChild(im);}}
-        tp.appendChild(el("div","tdate",t.name));
-        const r1=el("div","trow");r1.appendChild(el("span","tn",mapState.drill?"Price":"Tracked value"));
-        r1.appendChild(el("span","tv",fmc(t.price!=null?t.price:t.v)));tp.appendChild(r1);
-        const r2=el("div","trow");r2.appendChild(el("span","tn",{r30:"30-day",mom:"MoM",r90:"3-month"}[mapState.metric]));
-        r2.appendChild(el("span","tv "+pcls(t.pct),fp(t.pct)));tp.appendChild(r2);
-        if(t.n)tp.appendChild(el("div","tdate",t.n+" tracked assets — click to drill in"));}));
-      d.addEventListener("pointerleave",hideTip);
-      d.onclick=()=>{hideTip();if(t.drill){mapState.drill=t.drill;render();}else if(t.id)go("product",t.id);};
-      holder.appendChild(d);});
-  },0);
-  box.appendChild(el("div","note","Accessibility note: change is encoded twice — color and the printed % on every readable tile; the same data lives in the Screener as a sortable table."));
 }
 
 /* ================= LEARN THE BASICS ================= */
@@ -688,12 +800,11 @@ function vLearn(box){
     ["Confidence","How much to trust the quoted price: daily data on most days + calm trading + tight listings = high trust.","Low confidence = squint at the number."],
     ["Investment quality","The 'could I comfortably hold this for a year?' blend: steady trend, calm price, trusted data, tight spread.","The buy-and-hold report card."],
     ["Breakout probability","The model's odds of a new high soon. A forecast — treat it like the weather app, not a promise.","70% chance of rain still means pack a jacket, not a guarantee."]]],
-   ["Rankings, indexes & the map",[
+   ["Rankings & indexes",[
     ["Eligibility rules","To appear in rankings an item needs: a $5+ price ($25 sealed), a real price most days, 4+ months of history. This keeps junk and flukes off the boards.","Bouncer at the leaderboard door."],
     ["Meaningful moves","Gainer/loser boards weigh percent AND dollars, so a 1¢ card tripling never outranks a $600 card gaining $200.","Percent alone lies; dollars keep it honest."],
     ["Index","Many items tracked as one basket-number, like the S&P 500. We show it as growth of $100; the raw 'level' started at 100 in Jan 2025.","The market's team score instead of one player's."],
-    ["The four markets","Sealed vs singles, vintage vs modern — measured correlations are near zero, so we treat them as four separate markets with their own panels and leaders.","Four different games being played on one field."],
-    ["Market map","Rectangles sized by tracked money, colored by change (green up, red down). Click a set to see its cards.","A satellite photo of the whole market."]]],
+    ["The four markets","Sealed vs singles, vintage vs modern — measured correlations are near zero, so we treat them as four separate markets with their own panels and leaders.","Four different games being played on one field."]]],
    ["Honesty labels",[
     ["Thin market","Rarely-traded items (like vintage booster boxes) get flagged: one sale can move their price a lot, so they're excluded from momentum boards.","Small pond, big splashes."],
     ["Coverage","The share of days an item actually had a price. Low coverage = sporadic, less trustworthy data.","Attendance record for the data."],
@@ -743,13 +854,18 @@ function moveRow(a,pathText){
 function vHotCold(box){
   box.appendChild(el("div","h1","Hot & Cold"));
   box.appendChild(el("div","sub","Temperature is the state; this page tracks the CHANGES — what's thawing, what's freezing, and what's been running hot or frozen for a month straight. Real prices, refreshed daily."));
-  const elig=ASSETS.filter(a=>a.eligible.eligible&&a.scores.tempHist);
-  const moves=elig.map(a=>({a,m:tempMove(a)}));
+  // v12 (3b): same guards the Screener applies — thin markets out, implausible
+  // month-moves (data artifacts from near-zero base prices) suppressed
+  const elig=ASSETS.filter(a=>a.eligible.eligible&&a.scores.tempHist&&!a.trophy);
+  const IMPLAUSIBLE=400;
+  const dropped=elig.filter(a=>Math.abs(MP(a,"r30")||0)>IMPLAUSIBLE);
+  const sane=elig.filter(a=>Math.abs(MP(a,"r30")||0)<=IMPLAUSIBLE);
+  const moves=sane.map(a=>({a,m:tempMove(a)}));
   // thermometer: distribution of temperatures
   const counts={hot:0,warming:0,stagnant:0,cooling:0,cold:0};
-  elig.forEach(a=>counts[a.scores.temp]!=null&&counts[a.scores.temp]++);
-  const tot=elig.length||1;
-  const th=el("div","card");th.appendChild(el("h3",null,"Market thermometer — all "+tot+" eligible assets"));
+  sane.forEach(a=>counts[a.scores.temp]!=null&&counts[a.scores.temp]++);
+  const tot=sane.length||1;
+  const th=el("div","card");th.appendChild(el("h3",null,"Market thermometer — "+tot+" eligible assets (thin markets excluded)"));
   const bar=el("div");bar.style.cssText="display:flex;height:26px;border-radius:8px;overflow:hidden;margin:10px 0 6px";
   ["hot","warming","stagnant","cooling","cold"].forEach(k=>{
     const seg=el("div");seg.style.cssText="display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;min-width:2px";
@@ -783,6 +899,8 @@ function vHotCold(box){
       c.appendChild(moveRow(a,path));});
     g.appendChild(c);});
   box.appendChild(g);
+  if(dropped.length)box.appendChild(el("div","note",dropped.length+" asset"+(dropped.length>1?"s":"")+
+    " with >"+IMPLAUSIBLE+"% month moves excluded — moves that size in this data are thin-market artifacts, not real trades. They remain fully viewable via search."));
 }
 
 /* ================= ERA DASHBOARDS ================= */
@@ -954,9 +1072,6 @@ function vHome(box){
       ["hot","warming","stagnant","cooling","cold"].forEach(k=>{const seg=el("div");
         seg.style.cssText="min-width:1px";seg.style.width=(counts[k]/(elig.length||1)*100)+"%";seg.style.background=TEMP[k].color;bar.appendChild(seg);});
       c.appendChild(bar);}],
-   ["map","▩","Market map","The whole market as one picture — tiles sized by money, colored by movement.",
-    c=>{const mm=el("div");mm.style.cssText="display:grid;grid-template-columns:2fr 1fr 1fr;gap:3px;height:44px;margin-top:8px";
-      [8,-4,12,-9,3,6].slice(0,6).forEach(v=>{const t2=el("div");t2.style.cssText="border-radius:3px";t2.style.background=heatColor(v,1.4);mm.appendChild(t2);});c.appendChild(mm);}],
    ["eras","▣","Era dashboards","Nine eras, nine markets — WOTC scarcity to Mega-era hype, each with its own index.",
     c=>{const row=el("div");row.style.marginTop="8px";erasPresent().slice(0,5).forEach(e=>row.appendChild(el("span","badge",e)));c.appendChild(row);}],
    ["rankings","≡","Rankings","Twenty boards, eligibility-gated — meaningful movers, quality, breakouts.",
